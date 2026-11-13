@@ -2,7 +2,7 @@
   "name": "Jet Park City",
   "short_name": "JetPark",
   "description": "Fly through neon routes, collect energy tokens, build houses.",
-  "start_url": "./",
+  "start_url": "index.html",
   "scope": "./",
   "display": "fullscreen",
   "orientation": "landscape",
