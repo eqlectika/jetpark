@@ -1317,7 +1317,7 @@ const facadeMatB = new THREE.MeshPhongMaterial({ color: 0x121020, shininess: 40,
 const facadeMatC = new THREE.MeshPhongMaterial({ color: 0x0e1a1a, shininess: 40, specular: 0x102020 });
 const facadeMats = [facadeMatA, facadeMatB, facadeMatC];
 const matRoof = new THREE.MeshPhongMaterial({ color: 0x0a0a14, shininess: 10 });
-const matRoad = new THREE.MeshPhongMaterial({ color: 0x121218 });
+const matRoad = new THREE.MeshPhongMaterial({ color: 0x121218, emissive: 0x1a1030, emissiveIntensity: 0.55 });
 const matSidewalk = new THREE.MeshPhongMaterial({ color: 0x1a1a24 });
 const matTrunk = new THREE.MeshPhongMaterial({ color: 0x2a2018 });
 const matLeaves = new THREE.MeshPhongMaterial({ color: 0x1a3a24, shininess: 5 });
@@ -1622,28 +1622,42 @@ const checkpoints = points.map(p => makeCheckpoint(new THREE.Vector3(p.x, p.y, p
 // ГОРОД
 // =========================================================
 function buildCity() {
-    const roadSpacing = 55, roadRange = 480;
+const roadSpacing = 55, roadRange = 480;
+    // светящиеся полосы по краям улиц
+    const roadGlowMat = new THREE.MeshBasicMaterial({ color: 0x3a6fff, transparent: true, opacity: 0.45 });
     for (let x = -roadRange; x <= roadRange; x += roadSpacing) {
+        const rx = x + (rand() - 0.5) * 8;
         const road = new THREE.Mesh(new THREE.BoxGeometry(10, 0.3, roadRange * 2), matRoad);
-        road.position.set(x + (rand() - 0.5) * 8, 0.05, 0); scene.add(road);
+        road.position.set(rx, 0.05, 0); scene.add(road);
+        for (const side of [-5.2, 5.2]) {
+            const strip = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.12, roadRange * 2), roadGlowMat);
+            strip.position.set(rx + side, 0.22, 0); scene.add(strip);
+        }
     }
     for (let z = -roadRange; z <= roadRange; z += roadSpacing) {
+        const rz = z + (rand() - 0.5) * 8;
         const road = new THREE.Mesh(new THREE.BoxGeometry(roadRange * 2, 0.3, 10), matRoad);
-        road.position.set(0, 0.05, z + (rand() - 0.5) * 8); scene.add(road);
+        road.position.set(0, 0.05, rz); scene.add(road);
+        for (const side of [-5.2, 5.2]) {
+            const strip = new THREE.Mesh(new THREE.BoxGeometry(roadRange * 2, 0.12, 0.6), roadGlowMat);
+            strip.position.set(0, 0.22, rz + side); scene.add(strip);
+        }
     }
 
     const placed = [];
     const H_BASE = 6, H_EXP = 4.2, H_MAX_FACTOR = 30;
+    const PARK_R = 110;   // ← радиус парка в центре
 
-    for (let x = -CITY_SOFT_EDGE; x <= CITY_SOFT_EDGE; x += 22) {
-        for (let z = -CITY_SOFT_EDGE; z <= CITY_SOFT_EDGE; z += 22) {
+for (let x = -CITY_SOFT_EDGE; x <= CITY_SOFT_EDGE; x += 30) {
+        for (let z = -CITY_SOFT_EDGE; z <= CITY_SOFT_EDGE; z += 30) {
             const density = urbanDensity(x, z);
             if (density < 0.05) continue;
             const nearX = Math.abs(((x + roadSpacing / 2) % roadSpacing) - roadSpacing / 2) < 9;
             const nearZ = Math.abs(((z + roadSpacing / 2) % roadSpacing) - roadSpacing / 2) < 9;
             if (nearX || nearZ) continue;
-            if (isInAnyCorridor(x, z)) continue;
-            if (rand() > density * 1.15 + 0.05) continue;
+if (isInAnyCorridor(x, z)) continue;
+            if (Math.sqrt(x*x + z*z) < PARK_R) continue;
+            if (rand() > density * 0.75 + 0.03) continue;   // ← домов меньше
             let overlap = false;
             for (const c of placed) if ((c.x - x) ** 2 + (c.z - z) ** 2 < 18 * 18) { overlap = true; break; }
             if (overlap) continue;
@@ -1678,15 +1692,41 @@ function buildCity() {
     for (const a of archC) if (!isInAnyCorridor(a[0], a[1])) addArch(...a);
 
     const bridgeC = [[-140, 120, 140, 120, 45, 10], [120, -140, 120, 140, 55, 9], [-200, -100, -200, 100, 38, 8]];
-    for (const b of bridgeC) {
+for (const b of bridgeC) {
         const mx = (b[0] + b[2]) / 2, mz = (b[1] + b[3]) / 2;
         if (!isInAnyCorridor(mx, mz) && !isInAnyCorridor(b[0], b[1]) && !isInAnyCorridor(b[2], b[3])) addBridge(...b);
     }
+
+    buildCentralPark(PARK_R);
 }
 
-buildRingRoute('Lower Ring', 140, 80, 12, 0x4ade80);
-buildRingRoute('Upper Ring', 240, 120, 16, 0x60a5fa);
-buildSquareRoute('Square Route', 90, 60, 0xffd166);
+// ===== Центральный парк: деревья + большие арки (+1 JP за пролёт) =====
+const parkArches = [];
+function buildCentralPark(radius) {
+    // деревья по всему парку
+    for (let i = 0; i < 80; i++) {
+        const a = rand() * Math.PI * 2;
+        const r = 15 + rand() * (radius - 25);
+        addTree(Math.cos(a) * r, Math.sin(a) * r, 0.9 + rand() * 1.6);
+    }
+    // большие арки по кольцу внутри парка — пролёт даёт +1 JP
+    const archRingR = radius * 0.72;
+    const archCount = 6;
+    for (let i = 0; i < archCount; i++) {
+        const a = (i / archCount) * Math.PI * 2;
+        const x = Math.cos(a) * archRingR, z = Math.sin(a) * archRingR;
+        const rot = -a + Math.PI / 2;
+        addArch(x, z, 28, 42, 3, rot);
+        parkArches.push({ pos: new THREE.Vector3(x, 21, z), radius: 15, cooldownUntil: 0 });
+    }
+}
+
+// Lower — среди домов, самый малый радиус (R = 140)
+// Mid   — на уровне крыш (≈111), радиус ×2 от Lower (R = 280)
+// Upper — ×2 выше крыш (≈222), радиус ×2 от Mid (R = 560)
+buildRingRoute('Upper Ring (easy)', 560, 222, 20, 0x4ade80);
+buildRingRoute('Mid Ring',         280, 111, 16, 0x60a5fa);
+buildRingRoute('Lower Ring (hard)',140,  60, 12, 0xff3da0);
 buildCity();
 restoreWorld();
 window.addEventListener('pagehide', () => { snapshotWorld(); });
@@ -2169,14 +2209,26 @@ renderer.setAnimationLoop(() => {
                 }, 3000);
             }
         }
-        for (const orb of activeRoute.energyOrbs) {
+for (const orb of activeRoute.energyOrbs) {
             if (orb.collected) continue;
-if (player.position.distanceTo(orb.pos) < 12) {
+            if (player.position.distanceTo(orb.pos) < 12) {
                 orb.collected = true; orb.mesh.visible = false;
                 energyCount++;
                 Stats.data.orbs++;
                 Stats.add(1, 'orb');
                 boostTimer = ENERGY_BOOST_DURATION;
+            }
+        }
+
+        // ===== +1 JP за пролёт сквозь арку в парке (кулдаун 10с) =====
+        const nowMs = performance.now();
+        for (const arch of parkArches) {
+            if (nowMs < arch.cooldownUntil) continue;
+            if (player.position.distanceTo(arch.pos) < arch.radius) {
+                arch.cooldownUntil = nowMs + 10000;
+                Stats.add(1, 'park arch');
+                toast('+1 JP — park arch!', 'success', 1400);
+                break;
             }
         }
     }
