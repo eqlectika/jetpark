@@ -1724,9 +1724,9 @@ function buildCentralPark(radius) {
 // Lower — среди домов, самый малый радиус (R = 140)
 // Mid   — на уровне крыш (≈111), радиус ×2 от Lower (R = 280)
 // Upper — ×2 выше крыш (≈222), радиус ×2 от Mid (R = 560)
-buildRingRoute('Upper Ring (easy)', 560, 222, 20, 0x4ade80);
-buildRingRoute('Mid Ring',         280, 111, 16, 0x60a5fa);
-buildRingRoute('Lower Ring (hard)',140,  60, 12, 0xff3da0);
+buildRingRoute('Upper Ring (easy)', 560, 222, 20, 0x4ade80).jpPerPickup = 1;
+buildRingRoute('Mid Ring',         280, 111, 16, 0x60a5fa).jpPerPickup = 2;
+buildRingRoute('Lower Ring (hard)',140,  60, 12, 0xff3da0).jpPerPickup = 3;
 buildCity();
 restoreWorld();
 window.addEventListener('pagehide', () => { snapshotWorld(); });
@@ -2184,26 +2184,27 @@ renderer.setAnimationLoop(() => {
         }
         if (activeRoute.started) activeRoute.elapsed = (performance.now() - activeRoute.startTime) / 1000;
 
-        const cp = activeRoute.checkpoints[activeRoute.nextIndex];
+const cp = activeRoute.checkpoints[activeRoute.nextIndex];
         if (cp && player.position.distanceTo(cp.pos) < cp.radius) {
             activeRoute.nextIndex++;
             setNextCheckpoint();
 
-            // +1 JP за каждое кольцо, но не больше 2× длины маршрута за сессию
-            const maxEarned = activeRoute.checkpoints.length * 2;
-            if ((activeRoute.earnedThisRun || 0) < maxEarned) {
-                Stats.add(1, `ring ${activeRoute.nextIndex}/${activeRoute.checkpoints.length}`);
-                activeRoute.earnedThisRun = (activeRoute.earnedThisRun || 0) + 1;
-                toast(`+1 JP (${activeRoute.earnedThisRun}/${maxEarned})`, 'success', 1200);
-            }
+            const reward = activeRoute.jpPerPickup || 1;
+            Stats.add(reward, `ring ${activeRoute.nextIndex}/${activeRoute.checkpoints.length}`);
+            toast(`+${reward} JP`, 'success', 1200);
+            activeRoute.earnedThisRun = (activeRoute.earnedThisRun || 0) + reward;
 
             if (activeRoute.nextIndex >= activeRoute.checkpoints.length) {
-                activeRoute.completed = true;
+                const bonus = activeRoute.earnedThisRun;
+                Stats.add(bonus, `route complete bonus (x2)`);
+                toast(`✓ Route complete! +${bonus} JP bonus`, 'success', 3000);
                 Stats.data.routes++; Stats.save();
-                toast(`✓ Route complete!`, 'success');
+                activeRoute.completed = true;
                 setTimeout(() => {
-                    activeRoute.nextIndex = 0; activeRoute.completed = false;
-                    activeRoute.started = false; activeRoute.elapsed = 0;
+                    activeRoute.nextIndex = 0;
+                    activeRoute.completed = false;
+                    activeRoute.started = false;
+                    activeRoute.elapsed = 0;
                     activeRoute.earnedThisRun = 0;
                     setNextCheckpoint();
                 }, 3000);
@@ -2215,7 +2216,9 @@ for (const orb of activeRoute.energyOrbs) {
                 orb.collected = true; orb.mesh.visible = false;
                 energyCount++;
                 Stats.data.orbs++;
-                Stats.add(1, 'orb');
+                const reward = activeRoute.jpPerPickup || 1;
+                Stats.add(reward, 'orb');
+                activeRoute.earnedThisRun = (activeRoute.earnedThisRun || 0) + reward;
                 boostTimer = ENERGY_BOOST_DURATION;
             }
         }
