@@ -1,6 +1,6 @@
 {
-  "name": "Outside-in",
-  "short_name": "Outside-in",
+  "name": "JetPark",
+  "short_name": "JetPark",
   "description": "Jetpack mint and build",
   "start_url": "index.html",
   "display": "standalone",
