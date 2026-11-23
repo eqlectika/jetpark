@@ -1,9 +1,9 @@
 const CACHE_NAME = 'outside-in-jetpack-v1';
 const CORE_ASSETS = [
   './',
-  './manifest-outside-in.json',
-  './planet.png',
-  './planet.png?v=2',
+  './manifest.json',
+  './jetpark.PNG',
+  './jetpark.PNG?v=2',
   './fleurdelis.png'
 ];
 
