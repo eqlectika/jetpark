@@ -1,15 +1,22 @@
 {
-  "name": "Jet Park City",
-  "short_name": "JetPark",
-  "description": "Fly through neon routes, collect energy tokens, build houses.",
-"start_url": "./index.html",
-  "scope": "./",
-  "display": "fullscreen",
-  "orientation": "landscape",
-  "background_color": "#05050c",
-  "theme_color": "#0a1622",
+  "name": "Outside-in",
+  "short_name": "Outside-in",
+  "description": "Jetpack mint and build",
+  "start_url": "outside-in.html",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#ff5f00",
   "icons": [
-    { "src": "jetpark.PNG", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "jetpark.PNG", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    {
+      "src": "outside-in.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "outside-in.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }
