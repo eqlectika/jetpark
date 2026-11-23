@@ -1,55 +1,66 @@
-// Jet Park City — service worker v1 (cache-first static, network-first navigate)
-const CACHE = 'jetpark-v1';
-const CORE = ['./', './index.html', './jetpark.PNG', './manifest-jetpark.json'];
+const CACHE_NAME = 'outside-in-jetpack-v1';
+const CORE_ASSETS = [
+  './',
+  './manifest-outside-in.json',
+  './planet.png',
+  './planet.png?v=2',
+  './fleurdelis.png'
+];
 
-self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).catch(() => {}));
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS))
+  );
   self.skipWaiting();
 });
 
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
+      )
     )
   );
   self.clients.claim();
 });
 
-self.addEventListener('fetch', (e) => {
-  const req = e.request;
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
   if (req.method !== 'GET') return;
-  const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return; // не кэшируем CDN/MQTT
 
+  const url = new URL(req.url);
+
+  // Не перехватываем WebSocket / MQTT и не-HTTP(S) схемы
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+
+  // Для самой страницы — сначала сеть, при офлайне — кэш
   if (req.mode === 'navigate') {
-    e.respondWith(
+    event.respondWith(
       fetch(req)
         .then((res) => {
           const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy)).catch(() => {});
           return res;
         })
-        .catch(() => caches.match(req).then((r) => r || caches.match('./index.html')))
+        .catch(() => caches.match(req).then((cached) => cached || caches.match('./')))
     );
     return;
   }
 
-  e.respondWith(
+  // Для остальных GET-запросов — кэш при наличии, иначе сеть с дозаписью в кэш
+  event.respondWith(
     caches.match(req).then((cached) => {
       if (cached) return cached;
       return fetch(req).then((res) => {
-        if (res && res.status === 200 && res.type === 'basic') {
+        if (res && (res.status === 200 || res.type === 'opaque')) {
           const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy)).catch(() => {});
         }
         return res;
       });
     })
   );
-});
-
-// заготовка под будущую синхронизацию событий
-self.addEventListener('sync', (e) => {
-  if (e.tag === 'jetpark-sync') e.waitUntil(Promise.resolve());
 });
