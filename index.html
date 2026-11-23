@@ -1,2446 +1,1937 @@
 <!DOCTYPE html>
-<html> 
+<html lang="en">
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="description" content="Fly through neon routes, collect energy tokens, build houses, and share the city with other pilots.">
-<meta name="theme-color" content="#0a1622">
-<link rel="icon" type="image/png" href="jetpark.PNG">
-<link rel="apple-touch-icon" sizes="180x180" href="jetpark.PNG?v=2">
-<meta property="og:title" content="Jet Park City">
-<meta property="og:type" content="website">
-<meta property="og:image" href="Verge.jpeg">
-<meta property="og:image:width" content="1280">
-<meta property="og:image:height" content="1280">
-<link rel="manifest" href="manifest-jetpark.json">
-<title>Jet Park City</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<link rel="icon" type="image/png" sizes="512x512" href="planet.png">
+<link rel="apple-touch-icon" sizes="180x180" href="planet.png?v=2">
+<link rel="manifest" href="manifest-outside-in.json">
+<title>Outside-in Jetpack | Mint & Build</title>
+<script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
 <style>
-html, body { 
-    margin: 0; padding: 0;
-    width: 100dvw; height: 100dvh;
-    overflow: hidden; touch-action: none; 
-    user-select: none; -webkit-user-select: none;
-    background-color: #05050c;
-    font-family: Arial, sans-serif;
+*{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+html,body{
+  width:100dvw;height:100dvh;overflow:hidden;
+  touch-action:none;-ms-touch-action:none;background:#0a0a12;color:#eef2ff;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
 }
-canvas { display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-
-#controls { position: fixed; bottom: clamp(50px, 5vh, 80px); left: clamp(20px, 2vw, 40px); display: flex; pointer-events: none; z-index: 3000; }
-#logoLink { display: inline-block; margin: clamp(10px, 1vw, 20px); cursor: pointer; pointer-events: auto; }
-#logoLink img { display: block; width: clamp(48px, 3.5vw, 96px); height: clamp(48px, 3.5vw, 96px); }
-
-#throttleArea, #controlArea { position: fixed; top: 0; height: 100vh; z-index: 2000; pointer-events: auto; touch-action: none; }
-#throttleArea { left: 0; width: 50vw; }
-#controlArea { right: 0; width: 50vw; }
-@media (pointer: fine) { #throttleArea, #controlArea { pointer-events: none; } }
-
-#startButton {
-    position: fixed; top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 5000; padding: clamp(10px, 1vw, 24px) clamp(20px, 2vw, 48px);
-    background-color: #1a1a2e; color: #7dd3fc;
-    border: 1px solid #7dd3fc; border-radius: clamp(6px, 0.6vw, 14px);
-    font-size: clamp(12px, 1.9vw, 42px); cursor: pointer; letter-spacing: 2px;
+canvas{
+  display:block;position:fixed;inset:0;width:100%;height:100%;z-index:1;touch-action:none;
 }
 
-#topBar {
-    position: fixed; top: 0; left: 0; right: 0;
-    z-index: 4000; pointer-events: none;
-    display: flex; align-items: center; justify-content: flex-end;
-    padding: clamp(8px, 0.8vw, 20px) clamp(10px, 1vw, 24px); gap: clamp(4px, 0.5vw, 12px);
-    box-sizing: border-box;
+#throttleArea,#controlArea{
+  position:fixed;top:0;height:100dvh;width:50vw;z-index:10;pointer-events:auto;touch-action:none;
 }
-#presence {
-    display: flex; align-items: center; gap: clamp(6px, 0.5vw, 12px);
-    color: rgba(255,255,255,0.85); font-size: clamp(9px, 1.5vw, 34px);
-    text-shadow: 0 0 6px rgba(0,0,0,0.9);
-    pointer-events: none; white-space: nowrap;
+#throttleArea{left:0}
+#controlArea{right:0}
+@media (pointer:fine){
+  #throttleArea,#controlArea{pointer-events:none}
 }
-#presence .dot { width: clamp(7px, 0.8vw, 18px); height: clamp(7px, 0.8vw, 18px); border-radius: 50%; background: #8a8a9a; box-shadow: 0 0 5px currentColor; }
-#presence.multi .dot { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
 
-#topButtons {
-    display: flex; gap: clamp(4px, 0.5vw, 10px); align-items: center;
-    pointer-events: auto;
-    flex: 0 0 auto;
-    justify-content: flex-end;
+#startButton{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:60;
+  padding:14px 26px;background:rgba(59,59,79,.88);color:#fff;
+  border:none;border-radius:8px;font-size:16px;cursor:pointer;
 }
-.topBtn {
-    padding: clamp(4px, 0.65vw, 16px) clamp(8px, 1.4vw, 32px); font-size: clamp(9px, 1.5vw, 34px); color: rgba(255,255,255,0.75);
-    background: rgba(0,0,0,0.4); border: 1px solid rgba(125,211,252,0.3);
-    border-radius: clamp(4px, 0.5vw, 12px); cursor: pointer; white-space: nowrap;
-    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-    -webkit-tap-highlight-color: transparent;
-}
-.topBtn:active { transform: scale(0.96); }
-.topBtn.active { border-color: #4ade80; color: #4ade80; }
-#voiceBtn.active { border-color: #ff3da0; color: #ff3da0; }
-#routeBtn.active { border-color: #ffd166; color: #ffd166; }
 
+.top-left-hud{
+  position:fixed;top:max(8px,env(safe-area-inset-top));left:10px;z-index:40;
+  display:flex;align-items:center;gap:14px;font-size:13px;
+}
+.presence-badge{font-weight:700;letter-spacing:.3px}
+.presence-badge.alone{color:#94a3b8}
+.presence-badge.else{color:#4ade80}
+
+.top-btn{
+  background:none;border:none;padding:0;
+  color:#cbd5e1;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;
+}
+.top-btn:hover{color:#fff}
+
+.top-right-hud{
+  position:fixed;top:max(8px,env(safe-area-inset-top));right:10px;z-index:40;
+  display:flex;align-items:center;font-size:13px;
+}
 #peerIdInput{
-    pointer-events: auto;
-    color:#7dd3fc; background: transparent; border: 1px solid transparent; outline: none;
-    font-size: clamp(9px, 1.5vw, 34px); text-align: right;
-    width: clamp(84px, 10vw, 240px); margin-right:-3px; padding: clamp(4px, 0.6vw, 14px) 0 clamp(4px, 0.6vw, 14px) clamp(5px, 0.8vw, 16px);
-    user-select: text; -webkit-user-select: text; cursor: text;
-    transition: background .2s, color .2s, border-color .2s, box-shadow .2s, padding .15s;
-    border-radius: clamp(5px, 0.5vw, 12px); text-shadow: 0 0 6px rgba(0,0,0,0.9);
-    flex: 0 0 auto;
-    min-width: 0;
-    box-sizing: border-box;
+  background:none;border:none;border-bottom:1px solid transparent;
+  color:#38bdf8;font:inherit;font-weight:600;width:98px;text-align:right;outline:none;
+  user-select:text;-webkit-user-select:text;
 }
-#peerIdInput::placeholder{color:#555}
-#peerIdInput:focus{
-    padding: clamp(4px, 0.6vw, 14px) clamp(5px, 0.8vw, 16px);
-    background:rgba(0,0,0,0.6);
-    color:#fff;
-    border-color:#7dd3fc;
-    box-shadow:0 0 0 2px rgba(125,211,252,.25);
-}
-#peerIdInput.saved{color:#afff00 !important;border-color:#afff00 !important;}
+#peerIdInput:focus{border-bottom-color:#38bdf8;color:#fff}
+#peerIdInput.saved{color:#a3e635 !important;border-bottom-color:#a3e635 !important}
 
-#rightHud {
-    position: fixed; bottom: clamp(10px, 1vh, 24px); right: clamp(10px, 1vw, 24px);
-    z-index: 4000; color: rgba(255,255,255,0.85);
-    margin-bottom: 10px;
-    font-size: clamp(8px, 1vw, 22px); text-align: right; line-height: 1.4;
-    pointer-events: none; text-shadow: 0 0 6px rgba(0,0,0,0.95);
-    display: flex; flex-direction: column; align-items: flex-end; gap: clamp(6px, 0.6vw, 14px);
+#reticleWrap{
+  position:fixed;right:24px;bottom:84px;z-index:45;
+  touch-action:none;
 }
-#rightHud .section { display: flex; flex-direction: column; align-items: flex-end; }
-#rightHud .label { color: rgba(255,255,255,0.5); font-size: clamp(7px, 1.2vw, 26px); text-transform: uppercase; letter-spacing: 1px; }
-#rightHud .value { font-weight: bold; font-size: clamp(9px, 1.5vw, 34px); color: #fff; }
-#rightHud .complete { color: #4ade80; }
-#rightHud .divider { width: clamp(60px, 8vw, 180px); height: 1px; background: rgba(125,211,252,0.25); margin: 2px 0; }
-#rightHud .tokenValue { font-weight: bold; font-size: clamp(13px, 2vw, 44px); color: #ffd166; }
-#rightHud .valBlue { color: #7dd3fc; }
-#rightHud .routeBtn {
-    pointer-events: auto;
-    cursor: pointer;
-    color: #7dd3fc;
+#attackBtn{
+  width:56px;height:56px;
+  background:transparent;border:none;
+  color:rgba(255,255,255,.88);
+  display:flex;align-items:center;justify-content:center;
+  cursor:grab;touch-action:none;
 }
-#rightHud .routeBtn:active { opacity: 0.6; }
-
-#chatPanel {
-    position: fixed; bottom: clamp(8px, 1vh, 20px); left: clamp(12px, 1vw, 24px);
-    z-index: 4000;
-    right: clamp(10px, 1vw, 24px);
-    max-width: 62%;
-    max-height: clamp(160px, 18vh, 380px);
-    display: flex; flex-direction: column;
-    pointer-events: auto;
-    box-sizing: border-box;
-    margin-bottom: 10px;
+#attackBtn.active{
+  color:#fb7185;
+  filter:drop-shadow(0 0 6px rgba(251,113,133,.75));
+}
+#reticleMenu{
+  position:fixed;z-index:52;display:none;flex-direction:column;gap:4px;
+  background:rgba(10,14,26,.94);border:1px solid rgba(148,163,184,.32);
+  border-radius:8px;padding:6px;min-width:148px;max-width:186px;
+}
+#reticleMenu.open{display:flex}
+.rm-item{
+  background:rgba(30,41,59,.8);border:1px solid rgba(148,163,184,.22);
+  color:#f8fafc;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;
+  text-align:left;cursor:pointer;
+}
+@media (hover:hover){
+  .rm-item:hover{background:#1d4ed8;border-color:#93c5fd}
+}
+.rm-item.selected{background:#2563eb;border-color:#60a5fa}
+.rm-hint{
+  margin-top:2px;padding-top:4px;border-top:1px solid rgba(148,163,184,.18);
+  font-size:10.5px;line-height:1.3;color:#94a3b8;
 }
 
-#chatLog {
-    flex: 1 1 auto; overflow-y: auto;
-    font-size: clamp(11px, 1.7vw, 36px); line-height: 1.4;
-    color: rgba(255,255,255,0.85);
-    text-shadow: 0 0 6px rgba(0,0,0,0.95);
-    padding-bottom: 3px;
-    display: flex; flex-direction: column; gap: 2px;
-    -webkit-overflow-scrolling: touch; scrollbar-width: none;
-    max-height: clamp(110px, 14vh, 280px);
-    max-width: clamp(240px, 30vw, 640px);
+.bottom-bar{
+  position:fixed;left:10px;right:10px;bottom:max(8px,env(safe-area-inset-bottom));z-index:40;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;pointer-events:none;
 }
-#chatLog::-webkit-scrollbar { width: 0; height: 0; }
-#chatLog .msg .who { color: #7dd3fc; font-weight: bold; }
-#chatLog .msg .txt { color: #fff; }
-
-#chatInputWrap { display: flex; align-items: center; gap: clamp(5px, 0.5vw, 12px); margin-top: clamp(3px, 0.3vw, 8px); width: 100%; }
-
-#chatInput {
-    flex: 1 1 auto;
-    min-width: 0;
-    background: rgba(0,0,0,0.45);
-    border: 1px solid rgba(125,211,252,0.4);
-    border-radius: clamp(5px, 0.5vw, 12px);
-    padding: clamp(6px, 0.8vw, 18px) clamp(7px, 1vw, 22px);
-    color: #fff; font-size: clamp(11px, 1.7vw, 36px); outline: none;
-    user-select: text; -webkit-user-select: text;
-    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-    box-sizing: border-box;
+.chat-dock{
+  pointer-events:auto;display:flex;align-items:center;
+  background:rgba(10,13,25,.78);border:1px solid rgba(148,163,184,.25);
+  border-radius:8px;padding:4px 8px;
+  width:62vw;max-width:none;
 }
-#chatInput:focus { border-color: #7dd3fc; box-shadow: 0 0 0 2px rgba(125,211,252,0.25); }
-#chatSend {
-    background: rgba(125,211,252,0.15); border: 1px solid rgba(125,211,252,0.6);
-    color: #7dd3fc; border-radius: clamp(5px, 0.5vw, 12px); padding: clamp(6px, 0.8vw, 18px) clamp(8px, 1.2vw, 28px); font-size: clamp(11px, 1.7vw, 36px); cursor: pointer;
+#chatInput{
+  background:none;border:none;color:#fff;font-size:13px;
+  width:100%;outline:none;user-select:text;-webkit-user-select:text;
+}
+#chatInput::placeholder{color:#64748b}
+
+.token-dock{
+  pointer-events:auto;background:rgba(10,13,25,.75);
+  border:1px solid rgba(148,163,184,.22);border-radius:8px;
+  padding:5px 10px;font-size:13px;font-weight:700;color:#fbbf24;cursor:pointer;white-space:nowrap;
 }
 
-#pilotsPanel {
-    position: fixed; top: clamp(40px, 4vh, 80px); right: clamp(10px, 1vw, 24px);
-    z-index: 4000; display: flex; flex-direction: column; gap: clamp(4px, 0.4vw, 10px);
-    pointer-events: auto; max-height: clamp(200px, 22vh, 440px); overflow-y: auto;
-    scrollbar-width: none;
+#chatFeed{
+  position:fixed;left:10px;bottom:48px;z-index:35;
+  width:62vw;max-height:110px;overflow-y:auto;
+  font-size:12px;line-height:1.35;pointer-events:none;
+  display:flex;flex-direction:column;gap:2px;
 }
-#pilotsPanel::-webkit-scrollbar { width: 0; height: 0; }
-.pilotRow {
-    display: flex; align-items: center; gap: clamp(6px, 0.5vw, 12px);
-    padding: clamp(4px, 0.4vw, 10px) clamp(8px, 0.8vw, 18px); background: rgba(0,0,0,0.5);
-    border-radius: clamp(5px, 0.5vw, 12px); font-size: clamp(9px, 1.5vw, 34px); color: #fff;
-    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+.chat-line{background:none;padding:1px 2px;color:#f1f5f9;text-shadow:0 1px 2px #000}
+.chat-line span{color:#38bdf8;font-weight:600}
+
+.modal-overlay{
+  position:fixed;inset:0;z-index:100;display:none;
+  background:rgba(4,6,14,.94);overflow-y:auto;touch-action:pan-y;
 }
-.pilotRow .name { flex: 1 1 auto; color: #7dd3fc; }
-.pilotRow button {
-    padding: clamp(3px, 0.5vw, 12px) clamp(6px, 1vw, 22px); font-size: clamp(8px, 1.4vw, 30px); cursor: pointer;
-    background: rgba(125,211,252,0.15); border: 1px solid rgba(125,211,252,0.5);
-    color: #7dd3fc; border-radius: clamp(4px, 0.5vw, 10px);
+.modal-overlay.show{display:block}
+#statsModal .modal-card{
+  width:100%;min-height:100dvh;height:100dvh;
+  background:#0c1120;border:none;border-radius:0;padding:16px;
+  display:flex;flex-direction:column;overflow-y:auto;touch-action:pan-y;
+}
+.modal-card{
+  width:min(660px,calc(100% - 32px));margin:20px auto;
+  background:#0c1120;border:1px solid #1e293b;border-radius:12px;padding:16px;
+}
+.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.modal-head h2{font-size:16px}
+.close-modal{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:32px;
+  height:32px;
+  padding:0;
+  background:rgba(30,41,59,.75);
+  border:1px solid #999;
+  border-radius:8px;
+  color:#e2e8f0;
+  cursor:pointer;
 }
 
-#buildHud {
-    position: fixed; top: clamp(40px, 4vh, 80px); left: 50%;
-    transform: translateX(-50%); z-index: 4000;
-    display: none; flex-direction: column; align-items: center;
-    gap: clamp(4px, 0.4vw, 10px); padding: clamp(8px, 0.8vw, 20px) clamp(14px, 1.4vw, 32px);
-    background: rgba(0,0,0,0.6); border-radius: clamp(8px, 0.8vw, 18px);
-    color: #ffd166; font-size: clamp(10px, 1.6vw, 36px);
-    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-    pointer-events: auto;
-}
-#buildHud.active { display: flex; }
-#buildHud .size { font-size: clamp(12px, 1.9vw, 42px); font-weight: bold; }
-#buildHud .price { color: #4ade80; }
-#buildHud .price.insufficient { color: #ff3da0; }
-#buildHud .actions { display: flex; gap: clamp(6px, 0.6vw, 14px); margin-top: clamp(4px, 0.4vw, 10px); }
-#buildHud button {
-    padding: clamp(3px, 0.5vw, 12px) clamp(8px, 1.2vw, 28px); font-size: clamp(9px, 1.5vw, 34px); cursor: pointer;
-    background: rgba(255,209,102,0.15); border: 1px solid rgba(255,209,102,0.6);
-    color: #ffd166; border-radius: clamp(4px, 0.5vw, 12px);
+.close-modal:hover{
+  background:#1e293b;
+  border-color:#64748b;
+  color:#fff;
 }
 
-#routeBuildHud {
-    position: fixed; top: clamp(40px, 4vh, 80px); left: 50%;
-    transform: translateX(-50%); z-index: 4000;
-    display: none; flex-direction: column; align-items: center;
-    gap: clamp(4px, 0.4vw, 10px); padding: clamp(8px, 0.8vw, 20px) clamp(14px, 1.4vw, 32px);
-    background: rgba(0,0,0,0.6); border-radius: clamp(8px, 0.8vw, 18px);
-    color: #ffd166; font-size: clamp(10px, 1.6vw, 36px);
-    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-    pointer-events: auto;
-}
-#routeBuildHud.active { display: flex; }
-#routeBuildHud .info { font-size: clamp(11px, 1.7vw, 36px); }
-#routeBuildHud .price { color: #4ade80; }
-#routeBuildHud .price.insufficient { color: #ff3da0; }
-#routeBuildHud .hint { font-size: clamp(8px, 1.4vw, 30px); color: rgba(255,255,255,0.55); }
-#routeBuildHud .actions { display: flex; gap: clamp(6px, 0.6vw, 14px); margin-top: clamp(4px, 0.4vw, 10px); }
-#routeBuildHud button {
-    padding: clamp(3px, 0.5vw, 12px) clamp(8px, 1.2vw, 28px); font-size: clamp(9px, 1.5vw, 34px); cursor: pointer;
-    background: rgba(255,209,102,0.15); border: 1px solid rgba(255,209,102,0.6);
-    color: #ffd166; border-radius: clamp(4px, 0.5vw, 12px);
-}
-#routeBuildHud button:disabled { opacity: 0.35; cursor: not-allowed; }
 
-#frozenOverlay {
-    position: fixed; inset: 0; z-index: 4800;
-    display: none; align-items: center; justify-content: center;
-    background: rgba(255,0,50,0.15); pointer-events: none;
-    backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+.timeframe-bar{
+  display:flex;gap:6px;margin-bottom:8px;flex-shrink:0;
 }
-#frozenOverlay.show { display: flex; }
-#frozenOverlay .msg {
-    color: #ff3da0; font-size: clamp(16px, 2.6vw, 58px); font-weight: bold;
-    text-shadow: 0 0 12px #ff3da0; letter-spacing: 2px;
+.tf-btn{
+  background:#070a14;border:1px solid #1e293b;color:#94a3b8;
+  border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;
+}
+.tf-btn.active{
+  background:#2563eb;border-color:#60a5fa;color:#fff;
 }
 
-#toastBox {
-    position: fixed; top: clamp(60px, 6vh, 120px); left: 50%; transform: translateX(-50%);
-    z-index: 4700; display: flex; flex-direction: column; gap: 4px;
-    align-items: center; pointer-events: none;
+canvas#statsChart{
+  position:static;width:100%;height:150px;background:#070a14;
+  border:1px solid #1e293b;border-radius:8px;margin-bottom:12px;flex-shrink:0;
+  touch-action:pan-y;cursor:grab;
 }
-.toast {
-    padding: clamp(6px, 0.6vw, 16px) clamp(14px, 1.4vw, 32px); background: rgba(0,0,0,0.75);
-    border-radius: clamp(6px, 0.6vw, 14px); color: #fff; font-size: clamp(10px, 1.6vw, 36px);
-    border-left: 3px solid #7dd3fc;
-    animation: toastIn 0.2s ease-out;
-    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+canvas#statsChart:active{cursor:grabbing}
+.section-label{font-size:12px;font-weight:700;color:#94a3b8;margin-bottom:6px;display:block}
+.transfer-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.transfer-row input,.transfer-row select{
+  background:#070a14;border:1px solid #334155;color:#fff;border-radius:6px;padding:6px 8px;font-size:13px;
+  user-select:text;-webkit-user-select:text;
 }
-.toast.warn { border-left-color: #ffd166; color: #ffd166; }
-.toast.error { border-left-color: #ff3da0; color: #ff3da0; }
-.toast.success { border-left-color: #4ade80; color: #4ade80; }
-@keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-
-.overlay {
-    position: fixed; inset: 0; z-index: 4500;
-    display: none; background: rgba(0,0,0,0.92);
-    color: #fff; flex-direction: column;
-    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+.act-btn{
+  background:#2563eb;border:none;color:#fff;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;
 }
-.overlay.show { display: flex; }
-.overlay .title {
-    font-size: clamp(12px, 1.9vw, 42px); padding: clamp(12px, 1.2vw, 28px) clamp(16px, 1.6vw, 36px) clamp(8px, 0.8vw, 20px);
-    text-align: center; border-bottom: 1px solid rgba(125,211,252,0.2);
-    cursor: pointer;
+.act-btn.withdraw{background:#059669}
+.act-btn.secondary{background:#334155}
+.act-btn.danger{background:#dc2626}
+.act-btn:disabled{opacity:.45;cursor:default}
+.hist-list{
+  min-height:96px;max-height:200px;overflow-y:auto;
+  background:#070a14;border:1px solid #1e293b;border-radius:8px;
+  padding:4px 8px;margin-top:6px;margin-bottom:12px;flex-shrink:0;
 }
-.overlay .body {
-    flex: 1 1 auto; overflow-y: auto;
-    padding: clamp(10px, 1vw, 24px) clamp(14px, 1.4vw, 32px) clamp(20px, 2vw, 48px); font-size: clamp(10px, 1.6vw, 36px); line-height: 1.5;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
+.hist-item{
+  display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #131c31;font-size:12px;color:#e2e8f0;
 }
-.overlay .body::-webkit-scrollbar { width: 0; height: 0; }
-
-.statsGrid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(6px, 0.6vw, 14px); margin-bottom: clamp(12px, 1.2vw, 28px); }
-.statCard { padding: clamp(8px, 0.8vw, 20px) clamp(10px, 1vw, 24px); background: rgba(125,211,252,0.08); border-radius: clamp(6px, 0.6vw, 14px); border-left: 2px solid #7dd3fc; }
-.statCard .label { font-size: clamp(8px, 1.4vw, 30px); color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 1px; }
-.statCard .value { font-size: clamp(14px, 2.2vw, 50px); font-weight: bold; color: #7dd3fc; margin-top: 2px; }
-.statCard.gold .value { color: #ffd166; }
-.statCard.green .value { color: #4ade80; }
-.statCard.pink .value { color: #ff3da0; }
-
-.tfRow { display: flex; gap: clamp(4px, 0.4vw, 10px); margin-bottom: clamp(8px, 0.8vw, 20px); justify-content: center; }
-.tfBtn {
-    padding: clamp(4px, 0.65vw, 16px) clamp(10px, 1.4vw, 32px); font-size: clamp(9px, 1.5vw, 34px); cursor: pointer;
-    background: rgba(0,0,0,0.4); border: 1px solid rgba(125,211,252,0.3);
-    color: rgba(255,255,255,0.7); border-radius: clamp(4px, 0.5vw, 12px);
+.hist-item:last-child{border-bottom:none}
+.hist-item.sel{background:rgba(220,38,38,.16)}
+.buildings-box{
+  flex:1;min-height:120px;overflow-y:auto;background:#070a14;border:1px solid #1e293b;
+  border-radius:8px;padding:8px;font-size:12px;color:#cbd5e1;
 }
-.tfBtn.active { background: rgba(125,211,252,0.2); border-color: #7dd3fc; color: #7dd3fc; }
-
-#chartWrap {
-    width: 100%; height: clamp(180px, 18vh, 420px); margin-bottom: clamp(8px, 0.8vw, 20px);
-    background: rgba(0,0,0,0.3); border-radius: clamp(6px, 0.6vw, 14px);
-    position: relative; overflow: hidden;
+.b-row{
+  display:flex;justify-content:space-between;align-items:center;gap:8px;
+  padding:5px 0;border-bottom:1px solid #111827;
 }
-#chartWrap canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-
-.chartInfo {
-    display: flex; justify-content: space-between;
-    font-size: clamp(9px, 1.5vw, 34px); color: rgba(255,255,255,0.55);
-    margin-bottom: clamp(12px, 1.2vw, 28px); padding: 0 4px;
+.b-row:last-child{border-bottom:none}
+.help-text p{margin-bottom:8px;font-size:13px;line-height:1.45;color:#cbd5e1}
+.help-footer-logo{
+  margin-top:16px;padding-top:12px;border-top:1px solid #1e293b;
+  display:flex;justify-content:center;align-items:center;
 }
-.chartInfo .delta { color: #4ade80; }
-.chartInfo .delta.neg { color: #ff3da0; }
-
-#sendSection {
-    margin: clamp(10px, 1vw, 24px) 0 clamp(14px, 1.4vw, 32px); padding: clamp(10px, 1vw, 24px);
-    background: rgba(255,209,102,0.06);
-    border: 1px solid rgba(255,209,102,0.25);
-    border-radius: clamp(8px, 0.8vw, 18px);
+.help-footer-logo a{
+  display:inline-flex;align-items:center;justify-content:center;
+  opacity:.92;transition:transform .15s ease,opacity .15s ease;
 }
-.sendTitle {
-    font-size: clamp(9px, 1.5vw, 34px); color: rgba(255,255,255,0.55);
-    text-transform: uppercase; letter-spacing: 1px; margin-bottom: clamp(8px, 0.8vw, 20px);
-}
-.sendRow { display: flex; align-items: center; gap: clamp(8px, 0.8vw, 18px); margin-bottom: clamp(6px, 0.6vw, 14px); }
-.sendRow label { width: clamp(54px, 5vw, 120px); font-size: clamp(9px, 1.5vw, 34px); color: rgba(255,255,255,0.6); }
-.sendRow input {
-    flex: 1 1 auto; min-width: 0;
-    padding: clamp(7px, 0.9vw, 20px) clamp(8px, 1.2vw, 26px);
-    background: rgba(0,0,0,0.5);
-    border: 1px solid rgba(125,211,252,0.35);
-    border-radius: clamp(5px, 0.5vw, 12px); color: #fff; font-size: clamp(11px, 1.7vw, 36px); outline: none;
-    user-select: text; -webkit-user-select: text;
-}
-.sendRow input:focus { border-color: #7dd3fc; box-shadow: 0 0 0 2px rgba(125,211,252,0.2); }
-.sendRow input::placeholder { color: rgba(255,255,255,0.25); }
-.sendRow input::-webkit-outer-spin-button,
-.sendRow input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-
-.sendFee { font-size: clamp(9px, 1.5vw, 34px); color: rgba(255,255,255,0.5); margin-bottom: clamp(8px, 0.8vw, 20px); text-align: right; }
-.sendFee.insufficient { color: #ff3da0; }
-
-.sendBtn {
-    width: 100%; padding: clamp(9px, 1.1vw, 24px);
-    background: rgba(125,211,252,0.15);
-    border: 1px solid rgba(125,211,252,0.6);
-    color: #7dd3fc; border-radius: clamp(6px, 0.6vw, 14px);
-    font-size: clamp(11px, 1.7vw, 36px); font-weight: bold; cursor: pointer;
-    transition: opacity 0.15s, transform 0.1s;
-}
-.sendBtn:active { transform: scale(0.98); }
-.sendBtn:disabled { opacity: 0.35; cursor: not-allowed; color: rgba(255,255,255,0.5); border-color: rgba(255,255,255,0.2); }
-
-.txList { display: flex; flex-direction: column; gap: 2px; }
-.txRow {
-    display: flex; align-items: center; gap: clamp(8px, 0.8vw, 18px);
-    padding: clamp(4px, 0.4vw, 10px) 0; border-bottom: 1px solid rgba(255,255,255,0.05);
-    font-size: clamp(9px, 1.5vw, 34px);
-}
-.txRow .amt { min-width: clamp(40px, 4vw, 100px); text-align: right; font-weight: bold; }
-.txRow .amt.pos { color: #4ade80; }
-.txRow .amt.neg { color: #ff3da0; }
-.txRow .reason { flex: 1 1 auto; color: rgba(255,255,255,0.7); }
-.txRow .time { color: rgba(255,255,255,0.4); font-size: clamp(8px, 1.4vw, 30px); }
-
-.dangerBtn {
-    width: 100%; margin-top: clamp(14px, 1.4vw, 32px); padding: clamp(6px, 0.6vw, 16px);
-    background: rgba(255,61,160,0.1); border: 1px solid rgba(255,61,160,0.5);
-    color: #ff3da0; border-radius: clamp(5px, 0.5vw, 12px); font-size: clamp(10px, 1.6vw, 36px); cursor: pointer;
-}
-
-/* Route list overlay */
-.routeItem {
-    display: flex; align-items: center; gap: clamp(8px, 0.8vw, 18px);
-    padding: clamp(8px, 0.8vw, 20px) clamp(10px, 1vw, 24px); margin-bottom: clamp(4px, 0.4vw, 10px);
-    background: rgba(125,211,252,0.06);
-    border-left: 2px solid #7dd3fc;
-    border-radius: clamp(5px, 0.5vw, 12px); cursor: pointer;
-    font-size: clamp(10px, 1.6vw, 36px);
-}
-.routeItem.active { border-left-color: #4ade80; background: rgba(74,222,128,0.08); }
-.routeItem.own { border-left-color: #ffd166; }
-.routeItem .rn { flex: 1 1 auto; color: #fff; font-weight: bold; }
-.routeItem .rc { color: rgba(255,255,255,0.5); font-size: clamp(9px, 1.5vw, 34px); }
-.routeItem .author { color: #ffd166; font-size: clamp(9px, 1.5vw, 34px); }
-
+.help-footer-logo a:hover{opacity:1;transform:scale(1.04)}
+.help-footer-logo img{width:44px;height:44px;object-fit:contain;display:block}
 .ios-blur-fix {
-    position: fixed; top: 0; left: 0; right: 0; height: 11px;
-    z-index: 2147483647; pointer-events: none;
-    background-color: #000; -webkit-background-clip: text; color: transparent;
-}
-#voiceRow {
-    display: flex;
-    justify-content: flex-start;
-    margin-top: clamp(3px, 0.3vw, 8px);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 11px;
+  z-index: 2147483647;
+  pointer-events: none;
+  background-color: #000;
+  -webkit-background-clip: text;
+  color: transparent;
 }
 </style>
 </head>
 <body>
-    <div class="ios-blur-fix"></div>
+<div class="ios-blur-fix"></div>
+<button id="startButton">FULL SCREEN</button>
 
-    <div id="topBar">
-        <div id="presence" class="solo">
-            <span class="dot"></span>
-            <span id="presenceText">Solo</span>
-        </div>
-        <div id="topButtons">
-            <button class="topBtn" id="helpBtn">Help</button>
-            <button class="topBtn" id="statsBtn">Stats</button>
-            <button class="topBtn" id="buildBtn">Build</button>
-            <button class="topBtn" id="routeBtn">Route</button>
+<div class="top-left-hud">
+  <span id="presenceBadge" class="presence-badge alone">Alone</span>
+  <button id="helpBtn" class="top-btn">Help</button>
+</div>
 
-        </div>
-        <input type="text" id="peerIdInput" autocomplete="off" spellcheck="false" enterkeyhint="done"
-               placeholder="Peer-XXXX" title="Tap to rename yourself">
+<div class="top-right-hud">
+  <input id="peerIdInput" type="text" maxlength="12" spellcheck="false" autocomplete="off" placeholder="Peer-XXXX">
+</div>
+
+<div id="throttleArea"></div>
+<div id="controlArea"></div>
+
+<div id="reticleWrap">
+  <div id="attackBtn" title="Tap to open menu. Long-press the crosshair to activate the mode.">
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+      <line x1="18" y1="3" x2="18" y2="13" stroke="currentColor" stroke-width="2"/>
+      <line x1="18" y1="23" x2="18" y2="33" stroke="currentColor" stroke-width="2"/>
+      <line x1="3" y1="18" x2="13" y2="18" stroke="currentColor" stroke-width="2"/>
+      <line x1="23" y1="18" x2="33" y2="18" stroke="currentColor" stroke-width="2"/>
+      <circle cx="18" cy="18" r="2.2" fill="currentColor"/>
+    </svg>
+  </div>
+</div>
+
+<div id="reticleMenu">
+  <button class="rm-item selected" data-mode="build">Build</button>
+  <button class="rm-item" data-mode="attack">Attack</button>
+  <button class="rm-item" data-mode="hack">Hack</button>
+  <div class="rm-hint">Long-press the crosshair to activate the mode</div>
+</div>
+
+<div id="chatFeed"></div>
+<div class="bottom-bar">
+  <div class="chat-dock">
+    <input id="chatInput" type="text" maxlength="180" placeholder="Message..." autocomplete="off">
+  </div>
+  <div class="token-dock" id="tokenCounterDock">🪙 <span id="tokenBalanceEl">100</span></div>
+</div>
+
+<div class="modal-overlay" id="statsModal">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2>Stats</h2>
+<button class="close-modal" id="closeStatsBtn" aria-label="Close">
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <line x1="3.5" y1="3.5" x2="12.5" y2="12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <line x1="12.5" y1="3.5" x2="3.5" y2="12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+</button>
+
+    </div>
+    <div class="timeframe-bar" id="timeframeBar">
+      <button class="tf-btn active" data-tf="day">Day</button>
+      <button class="tf-btn" data-tf="week">Week</button>
+      <button class="tf-btn" data-tf="month">Month</button>
+      <button class="tf-btn" data-tf="all">All</button>
+    </div>
+    <canvas id="statsChart" width="620" height="150"></canvas>
+
+    <span class="section-label">Token Transfer</span>
+    <div class="transfer-row">
+      <select id="recipientSelect" title="To Peer"></select>
+      <input id="recipientCustom" type="text" placeholder="To Peer-XXXX" style="width:130px">
+      <input id="transferAmount" type="number" min="1" step="1" value="5" style="width:80px">
+      <button class="act-btn" id="sendTokensBtn">Send</button>
     </div>
 
-    <div id="pilotsPanel"></div>
-
-    <div id="buildHud">
-        <div class="size" id="buildSize">20 × 20 × 40</div>
-        <div class="price" id="buildPrice">0 JP</div>
-        <div class="actions">
-            <button id="buildPlaceBtn">Build</button>
-            <button id="buildCancelBtn">Cancel</button>
-        </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      <strong style="font-size:13px">Expense History</strong>
+      <div style="display:flex;gap:6px">
+        <button class="act-btn secondary" id="selectAllHistBtn">Select All</button>
+        <button class="act-btn danger" id="deleteSelectedHistBtn" disabled>Delete Selected</button>
+      </div>
     </div>
+    <div class="hist-list" id="expenseHistoryList"></div>
 
-    <div id="routeBuildHud">
-        <div class="info">Route draft: <span id="routeRingCount">0</span> rings</div>
-        <div class="price" id="routePrice">0 JP</div>
-        <div class="hint">Tap scene to place ring · Finish to close</div>
-        <div class="actions">
-            <button id="routeFinishBtn" disabled>Finish</button>
-            <button id="routeCancelBtn">Cancel</button>
-        </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
+      <strong style="font-size:12px;color:#94a3b8">Built Houses (<span id="builtCountEl">0</span>)</strong>
+      <button class="act-btn withdraw" id="withdrawAllBtn" disabled>Withdraw All</button>
     </div>
+    <div class="buildings-box" id="builtHousesList"></div>
+  </div>
+</div>
 
-    <div id="rightHud">
-
-        <div class="section">
-            <div class="label">Route</div>
-            <div class="value routeBtn" id="routeName">—</div>
-        </div>
-        <div class="section">
-            <div class="label">Checkpoints</div>
-            <div class="value" id="routeCP">0 / 0</div>
-        </div>
-        <div class="section">
-            <div class="label">Time</div>
-            <div class="value" id="routeTime">—</div>
-        </div>
-        <div class="divider"></div>
-        <div class="section">
-            <div class="label">Balance</div>
-            <div class="tokenValue"><span id="balanceET">0</span> JP</div>
-        </div>
-        <div class="section">
-            <div class="label">Energy</div>
-            <div class="value valBlue" id="routeEnergy">0</div>
-        </div>
-        <div class="section">
-            <div class="label">Boost</div>
-            <div class="value valBlue" id="boostTime">—</div>
-        </div>
+<div class="modal-overlay" id="helpModal">
+  <div class="modal-card help-text">
+    <div class="modal-head">
+      <h2>Controls &amp; Rules</h2>
+      <button class="close-modal" id="closeHelpBtn">✕</button>
     </div>
-
-    <div id="chatPanel">
-        <div id="chatLog"></div>
-            <div id="voiceRow">
-        <button class="topBtn" id="voiceBtn">🎤</button>
+    <p><strong>Touch Controls:</strong> Drag up or down on the left half of the screen for throttle; drag on the right half to tilt.</p>
+    <p><strong>Desktop Controls:</strong> Use Arrow keys (<code>←</code> <code>↑</code> <code>↓</code> <code>→</code>) or hold left mouse button and drag to tilt; hold <code>Space</code> for forward thrust (double-tap <code>Space</code> for boost) or <code>B</code> for reverse thrust.</p>
+    <p><strong>Reticle &amp; Modes:</strong> Drag the crosshair to aim. <strong>Tap</strong> the crosshair to open or close the mode menu (<code>Build</code>, <code>Attack</code>, <code>Hack</code>), select a mode, and <strong>long-press</strong> the crosshair (or hold/press <code>F</code>) to activate it.</p>
+    <p><strong>Free Flight &amp; Gravity:</strong> Fly in any direction indefinitely. Gravity is zero at the planet center and zero at the matching outer height.</p>
+    <p><strong>Houses, Roofs &amp; Bridges:</strong> Buildings place on your current side without overlapping, feature roof accents matching the nearest sector center, and can span horizontally as arches or bridges when anchored to another building wall.</p>
+    <p><strong>Hack Houses &amp; Flyers:</strong> Hack stored tokens from other players' buildings or hack nearby players mid-flight.</p>
+    <div class="help-footer-logo">
+      <a href="https://eugenebox.t.me" target="_blank" rel="noopener noreferrer" title="Telegram">
+        <img src="fleurdelis.png" alt="Fleur-de-lis">
+      </a>
     </div>
-        <div id="chatInputWrap">
-            <input id="chatInput" type="text" placeholder="say something…" autocomplete="off" enterkeyhint="send" maxlength="120">
-            <button id="chatSend">Send</button>
-        </div>
-    </div>
+  </div>
+</div>
 
-    <div id="toastBox"></div>
-
-    <div id="frozenOverlay">
-        <div class="msg" id="frozenMsg">FROZEN</div>
-    </div>
-
-    <button id="startButton">START</button>
-    
-    <div id="throttleArea"></div>
-    <div id="controlArea"></div>
-
-    <div class="overlay" id="helpSheet">
-        <div class="title">Help (tap here to close)</div>
-        <div class="body">
-            <p><b>Left side</b> — thrust up / down</p>
-            <p><b>Right side</b> — steer and tilt</p>
-            <p><b>Space</b> — forward thrust (double — boost)</p>
-            <p><b>B</b> — reverse thrust (double — reverse boost)</p>
-            <p><b>Arrows</b> — steer and tilt</p>
-            <p><b>Rings</b> — fly through in order to complete a route</p>
-            <p><b>Orbs</b> — collect to earn JP</p>
-            <p><b>Build</b> — press Build button, adjust size, place house for JP</p>
-            <p><b>Route</b> — press Route button, tap scene to place rings (min 3), Finish to close. Price: 20 JP + 2 JP per ring over 8.</p>
-            <p><b>Route list</b> — tap route name in bottom-right HUD to switch routes</p>
-            <p><b>Freeze</b> — 1 JP from pilots list freezes another pilot 5s</p>
-            <p><b>Send JP</b> — transfer tokens to another pilot (1% fee → game author)</p>
-            <p><b>🎤</b> — push-to-talk voice (hold to speak)</p>
-            <p><b>Violation</b> — flying through a house: 1st freeze+warn, then −1 JP, then −3 JP, then 10s build lockout</p>
-        </div>
-    </div>
-
-    <div class="overlay" id="statsSheet">
-        <div class="title" id="statsTitle">Stats (tap here to close)</div>
-        <div class="body">
-            <div class="statsGrid">
-                <div class="statCard gold"><div class="label">Balance</div><div class="value"><span id="statBalance">0</span> JP</div></div>
-                <div class="statCard green"><div class="label">Lifetime earned</div><div class="value">+<span id="statEarned">0</span> JP</div></div>
-                <div class="statCard pink"><div class="label">Lifetime spent</div><div class="value">−<span id="statSpent">0</span> JP</div></div>
-                <div class="statCard"><div class="label">Routes completed</div><div class="value" id="statRoutes">0</div></div>
-                <div class="statCard"><div class="label">Houses built</div><div class="value" id="statBuilds">0</div></div>
-                <div class="statCard"><div class="label">Orbs collected</div><div class="value" id="statOrbs">0</div></div>
-                <div class="statCard pink"><div class="label">Violations</div><div class="value" id="statViolations">0</div></div>
-                <div class="statCard"><div class="label">Play time</div><div class="value" id="statPlaytime">0h</div></div>
-            </div>
-            <div class="tfRow" id="tfRow">
-                <button class="tfBtn" data-tf="1h">1H</button>
-                <button class="tfBtn" data-tf="24h">24H</button>
-                <button class="tfBtn" data-tf="7d">7D</button>
-                <button class="tfBtn active" data-tf="all">All</button>
-            </div>
-            <div id="chartWrap"><canvas id="chartCanvas"></canvas></div>
-            <div class="chartInfo">
-                <span>min <span id="chartMin">0</span></span>
-                <span class="delta" id="chartDelta">+0</span>
-                <span>max <span id="chartMax">0</span></span>
-            </div>
-
-            <div id="sendSection">
-                <div class="sendTitle">Send JP</div>
-                <div class="sendRow">
-                    <label>To</label>
-                    <input type="text" id="sendToInput" list="pilotsDatalist" placeholder="Peer-XXXX" autocomplete="off" spellcheck="false" maxlength="32">
-                    <datalist id="pilotsDatalist"></datalist>
-                </div>
-                <div class="sendRow">
-                    <label>Amount</label>
-                    <input type="number" id="sendAmountInput" placeholder="0" min="1" step="1" inputmode="numeric">
-                </div>
-                <div class="sendFee" id="sendFeeLine">Fee 1%: —</div>
-                <button id="sendTokensBtn" class="sendBtn" disabled>Send</button>
-            </div>
-
-            <div style="font-size:clamp(9px,1.5vw,34px);color:rgba(255,255,255,0.4);margin-bottom:4px;">Recent transactions</div>
-            <div class="txList" id="txList"></div>
-            <button class="dangerBtn" id="resetStatsBtn">Reset all stats (double tap)</button>
-        </div>
-    </div>
-
-    <div class="overlay" id="routesSheet">
-        <div class="title" id="routesTitle">Routes (tap here to close)</div>
-        <div class="body">
-            <div id="routeListBody"></div>
-        </div>
-    </div>
-
-<script>
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
 }
 </script>
-    
-<script type="importmap">
-  { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
-</script>
-<script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
-<script>
-// ===== WorldStore: IndexedDB + localStorage, независимый модуль =====
-(function () {
-  const DB_NAME = 'jetpark', DB_VERSION = 1, LS_KEY = 'jp_world_meta';
-  let _dbPromise = null;
 
-  function openDB() {
-    if (_dbPromise) return _dbPromise;
-    _dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, DB_VERSION);
-      req.onupgradeneeded = (e) => {
-        const db = e.target.result;
-        if (!db.objectStoreNames.contains('houses')) {
-          const s = db.createObjectStore('houses', { keyPath: 'houseId' });
-          s.createIndex('updatedAt', 'updatedAt', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('routes')) {
-          const s = db.createObjectStore('routes', { keyPath: 'routeId' });
-          s.createIndex('updatedAt', 'updatedAt', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('events')) {
-          const s = db.createObjectStore('events', { keyPath: 'id', autoIncrement: true });
-          s.createIndex('synced', 'synced', { unique: false });
-        }
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    return _dbPromise;
-  }
-
-  function tx(storeName, mode, fn) {
-    return openDB().then((db) => new Promise((resolve, reject) => {
-      const t = db.transaction(storeName, mode);
-      const store = t.objectStore(storeName);
-      let result;
-      try { result = fn(store); } catch (e) { reject(e); return; }
-      t.oncomplete = () => resolve(result);
-      t.onerror = () => reject(t.error);
-      t.onabort = () => reject(t.error);
-    }));
-  }
-
-  window.WorldStore = {
-    putHouse(h) {
-      h.updatedAt = Date.now();
-      return tx('houses', 'readwrite', (s) => s.put(h)).then(() => this._touchMeta());
-    },
-    getHouse(id) { return tx('houses', 'readonly', (s) => s.get(id)).then((r) => r.result || null); },
-    getAllHouses() { return tx('houses', 'readonly', (s) => s.getAll()).then((r) => r.result || []); },
-    deleteHouse(id) { return tx('houses', 'readwrite', (s) => s.delete(id)); },
-
-    putRoute(r) {
-      r.updatedAt = Date.now();
-      return tx('routes', 'readwrite', (s) => s.put(r)).then(() => this._touchMeta());
-    },
-    getRoute(id) { return tx('routes', 'readonly', (s) => s.get(id)).then((r) => r.result || null); },
-    getAllRoutes() { return tx('routes', 'readonly', (s) => s.getAll()).then((r) => r.result || []); },
-    deleteRoute(id) { return tx('routes', 'readwrite', (s) => s.delete(id)); },
-
-    pushEvent(type, payload) {
-      return tx('events', 'readwrite', (s) => s.add({ type, payload, ts: Date.now(), synced: false }));
-    },
-    getUnsyncedEvents(limit = 100) {
-      return tx('events', 'readonly', (s) => s.index('synced').getAll(IDBKeyRange.only(false), limit))
-        .then((r) => r.result || []);
-    },
-    markEventSynced(id) {
-      return tx('events', 'readwrite', (s) => s.get(id).then((r) => {
-        const ev = r.result; if (!ev) return; ev.synced = true; s.put(ev);
-      }));
-    },
-    clearSyncedEvents() {
-      return tx('events', 'readwrite', (s) => s.getAll().then((r) => {
-        (r.result || []).forEach((ev) => { if (ev.synced) s.delete(ev.id); });
-      }));
-    },
-
-    _touchMeta() {
-      try {
-        const m = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
-        m.lastUpdate = Date.now();
-        localStorage.setItem(LS_KEY, JSON.stringify(m));
-      } catch (e) {}
-    },
-
-    async stats() {
-      const [h, r, e] = await Promise.all([this.getAllHouses(), this.getAllRoutes(), this.getUnsyncedEvents(1e6)]);
-      return { houses: h.length, routes: r.length, unsyncedEvents: e.length };
-    }
-  };
-})();
-</script>
 <script type="module">
 import * as THREE from 'three';
 
-// =========================================================
-// LS helpers
-// =========================================================
-function loadLS(k, fb) { try { const v = localStorage.getItem(k); return v === null ? fb : v; } catch(e){ return fb; } }
-function saveLS(k, v) { try { localStorage.setItem(k, v); } catch(e){} }
-function loadLSJson(k, fb) { try { const v = localStorage.getItem(k); return v === null ? fb : JSON.parse(v); } catch(e){ return fb; } }
-function saveLSJson(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+/* Block system magnifying lens / context menu / text selection outside inputs */
+document.addEventListener('contextmenu', (e) => e.preventDefault(), { passive: false });
+document.addEventListener('selectstart', (e) => {
+  if (!e.target || !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)){
+    e.preventDefault();
+  }
+}, { passive: false });
+document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
+document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false });
+document.addEventListener('gestureend', (e) => e.preventDefault(), { passive: false });
+window.addEventListener('wheel', (e) => {
+  if (e.ctrlKey) e.preventDefault();
+}, { passive: false });
+let lastTouchEndMs = 0;
+document.addEventListener('touchend', (e) => {
+  const now = Date.now();
+  if (now - lastTouchEndMs <= 300){
+    e.preventDefault();
+  }
+  lastTouchEndMs = now;
+}, { passive: false });
 
-// =========================================================
-// HMAC (author + fee protection)
-// =========================================================
-const _authorBytes = [0x50,0x65,0x65,0x72,0x2d,0x4a,0x50,0x41,0x55,0x54,0x48,0x4f,0x52];
-const AUTHOR_ID = String.fromCharCode(..._authorBytes);
-const FEE_RATE = 0.01;
+const AUTHOR_ID = 'eugenebox';
+const INITIAL_CAPITAL = 100;
+const FLY_SPEED = 0.013;
+const TURN_SPEED = 0.00034;
+const TOUCH_TURN_SPEED = 0.0005;
+const GRAVITY = 0.0043333;
+const DAMPING_TURN = 0.99;
+const DAMPING_MOVE = 0.99;
+const PLANET_RADIUS = 1500;
+const RING_COOLDOWN_MS = 4000;
+const RING_ACTIVE_OPACITY = 0.9;
+const RING_FADED_OPACITY = 0.14;
+const LONG_PRESS_MS = 450;
 
-const _k1 = [0x6a,0x70,0x6b,0x2d,0x68,0x6d,0x61,0x63];
-const _k2 = [0x2d,0x76,0x32,0x2d,0x32,0x30,0x32,0x35];
-const _k3 = [0x2d,0x61,0x75,0x74,0x68,0x2d,0x66,0x65,0x65];
-const HMAC_KEY = new Uint8Array([..._k1, ..._k2, ..._k3]);
-
-async function hmacSign(dataStr) {
-    const enc = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-        'raw', HMAC_KEY,
-        { name: 'HMAC', hash: 'SHA-256' },
-        false, ['sign']
-    );
-    const sig = await crypto.subtle.sign('HMAC', key, enc.encode(dataStr));
-    return btoa(String.fromCharCode(...new Uint8Array(sig)));
-}
-
-async function txPayloadString(tx) {
-    return `${tx.from}|${tx.to}|${tx.amount}|${tx.ts}`;
-}
-
-async function signTx(tx) { return hmacSign(await txPayloadString(tx)); }
-
-async function verifyTx(tx) {
-    if (!tx || !tx.sig) return false;
-    const expected = await signTx(tx);
-    if (expected.length !== tx.sig.length) return false;
-    let diff = 0;
-    for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ tx.sig.charCodeAt(i);
-    return diff === 0;
-}
-
-// =========================================================
-// Identity
-// =========================================================
-let myId = loadLS('jp_peer_id', null);
-if (!myId) { myId = 'Peer-' + Math.floor(Math.random() * 9000 + 1000); saveLS('jp_peer_id', myId); }
-const clientId = 'jp_' + Math.random().toString(16).slice(2, 10);
-
-const peerIdInput = document.getElementById('peerIdInput');
-peerIdInput.value = myId;
-let _idBefore = myId;
-peerIdInput.addEventListener('focus', () => { _idBefore = myId; requestAnimationFrame(() => peerIdInput.select()); });
-peerIdInput.addEventListener('keyup', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); commitPeerId(); peerIdInput.blur(); }
-    if (e.key === 'Escape') { peerIdInput.value = _idBefore; peerIdInput.blur(); }
-});
-peerIdInput.addEventListener('blur', () => { const v = peerIdInput.value.trim(); if (v !== myId) peerIdInput.value = myId; });
-function commitPeerId() {
-    const v = peerIdInput.value.trim();
-    if (v === myId) { peerIdInput.value = myId; return; }
-    if (!/^[A-Za-z0-9_\-]{3,16}$/.test(v)) { peerIdInput.value = myId; return; }
-    myId = v; saveLS('jp_peer_id', myId); peerIdInput.value = myId;
-    peerIdInput.classList.add('saved');
-    setTimeout(() => peerIdInput.classList.remove('saved'), 800);
-}
-
-// =========================================================
-// ECONOMY + STATS
-// =========================================================
-const Stats = {
-    data: loadLSJson('jp_stats', null) || {
-        balance: 0, earned: 0, spent: 0,
-        builds: 0, routes: 0, orbs: 0, violations: 0,
-        playtimeStart: Date.now(),
-        firstRun: Date.now(),
-        snapshots: [],
-        txLog: []
-    },
-
-    save() { saveLSJson('jp_stats', this.data); },
-
-    add(delta, reason) {
-        this.data.balance += delta;
-        if (delta > 0) this.data.earned += delta;
-        else this.data.spent += -delta;
-        this.data.snapshots.push({ ts: Date.now(), balance: this.data.balance, reason });
-        this.data.txLog.push({ ts: Date.now(), amount: delta, reason });
-        if (this.data.snapshots.length > 5000) this.data.snapshots.splice(0, this.data.snapshots.length - 5000);
-        if (this.data.txLog.length > 200) this.data.txLog.splice(0, this.data.txLog.length - 200);
-        this.save();
-        updateBalanceHud();
-        return this.data.balance;
-    },
-
-    canAfford(amount) { return this.data.balance >= amount; },
-
-    reset() {
-        const firstRun = this.data.firstRun;
-        this.data = {
-            balance: 0, earned: 0, spent: 0,
-            builds: 0, routes: 0, orbs: 0, violations: 0,
-            playtimeStart: Date.now(), firstRun,
-            snapshots: [{ ts: Date.now(), balance: 0, reason: 'reset' }],
-            txLog: []
-        };
-        this.save();
-        updateBalanceHud();
-    }
+const memoryStore = {};
+const store = {
+  get(k, fb){
+    const key = 'oip_' + k;
+    try{
+      const v = localStorage.getItem(key);
+      if (v !== null) return JSON.parse(v);
+    }catch{}
+    return Object.prototype.hasOwnProperty.call(memoryStore, key) ? memoryStore[key] : fb;
+  },
+  set(k, v){
+    const key = 'oip_' + k;
+    memoryStore[key] = v;
+    try{ localStorage.setItem(key, JSON.stringify(v)); }catch{}
+  }
 };
 
-const balanceETEl = document.getElementById('balanceET');
-function updateBalanceHud() {
-    balanceETEl.textContent = Stats.data.balance;
-    if (typeof validateSendForm === 'function' &&
-        document.getElementById('statsSheet').classList.contains('show')) {
-        validateSendForm();
+let myPeerId = store.get('peer_id') || ('Peer-' + Math.floor(1000 + Math.random() * 9000));
+store.set('peer_id', myPeerId);
+const clientId = 'oip_' + Math.random().toString(16).slice(2, 10);
+
+if (!store.get('initialized', false)){
+  store.set('tokens', INITIAL_CAPITAL);
+  store.set('initialized', true);
+}
+
+let tokens = Number(store.get('tokens', INITIAL_CAPITAL));
+if (!Number.isFinite(tokens)) tokens = INITIAL_CAPITAL;
+let tokenSeries = Array.isArray(store.get('token_series', null)) ? store.get('token_series', []) : [{ t: Date.now(), val: tokens }];
+if (!tokenSeries.length) tokenSeries = [{ t: Date.now(), val: tokens }];
+let expenseHistory = Array.isArray(store.get('expense_history', null)) ? store.get('expense_history', []) : [];
+let selectedExpenseIds = new Set();
+let buildings = Array.isArray(store.get('buildings', null)) ? store.get('buildings', []) : [];
+let selectedTimeframe = store.get('chart_timeframe', 'day');
+if (!['day', 'week', 'month', 'all'].includes(selectedTimeframe)) selectedTimeframe = 'day';
+
+function saveEconomy(){
+  store.set('tokens', tokens);
+  store.set('token_series', tokenSeries.slice(-300));
+  store.set('expense_history', expenseHistory);
+}
+function recordTokenDelta(delta, reason, isExpense = false){
+  const numDelta = Number(delta);
+  if (!Number.isFinite(numDelta)) return;
+  tokens = Math.max(0, Number((tokens + numDelta).toFixed(2)));
+  tokenSeries.push({ t: Date.now(), val: tokens });
+  if (isExpense || numDelta < 0){
+    const absAmt = Number(Math.abs(numDelta).toFixed(2));
+    if (absAmt > 0){
+      expenseHistory.unshift({
+        id: 'exp_' + Date.now() + '_' + Math.random().toString(16).slice(2, 6),
+        reason: reason || 'Expense',
+        amount: absAmt,
+        ts: Date.now()
+      });
     }
+  }
+  saveEconomy();
+  tokenBalanceEl.textContent = Number.isInteger(tokens) ? tokens : tokens.toFixed(1);
+  if (typeof statsModal !== 'undefined' && statsModal && statsModal.classList.contains('show')){
+    drawChart();
+    renderExpenseHistory();
+    renderBuiltHouses();
+  }
+}
+function routeAuthorFee(amount, source, buildingId = null){
+  const numAmt = Number(amount);
+  if (!Number.isFinite(numAmt) || numAmt <= 0) return;
+  const rounded = Number(numAmt.toFixed(2));
+  if (myPeerId === AUTHOR_ID){
+    recordTokenDelta(rounded, `Author share (${source})`, false);
+  }
+  publishMqtt({
+    type: 'AUTHOR_SHARE',
+    to: AUTHOR_ID,
+    amount: rounded,
+    source,
+    buildingId,
+    from: myPeerId
+  });
 }
 
-if (Stats.data.snapshots.length === 0) {
-    Stats.data.snapshots.push({ ts: Date.now(), balance: 0, reason: 'init' });
-    Stats.add(15, 'welcome bonus');
-} else {
-    updateBalanceHud();
-}
-
-// =========================================================
-// TOAST
-// =========================================================
-const toastBox = document.getElementById('toastBox');
-function toast(text, kind = 'info', duration = 3000) {
-    const el = document.createElement('div');
-    el.className = 'toast ' + kind;
-    el.textContent = text;
-    toastBox.appendChild(el);
-    setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; }, duration - 300);
-    setTimeout(() => el.remove(), duration);
-}
-
-// =========================================================
-// MQTT
-// =========================================================
-const BROKER = 'wss://broker.emqx.io:8084/mqtt';
-const TOPIC_PRESENCE   = 'jetpark/presence/v1';
-const TOPIC_CHAT       = 'jetpark/chat/v1';
-const TOPIC_ECON       = 'jetpark/econ/v1';
-const TOPIC_BUILD      = 'jetpark/build/v1';
-const TOPIC_FREEZE     = 'jetpark/freeze/v1';
-const TOPIC_VOICE      = 'jetpark/voice/v1';
-const TOPIC_ROUTE      = 'jetpark/route/v1';
-
-let client = null;
-const activePeers = {};
-const seenTxIds = new Set();
-
-const presenceEl = document.getElementById('presence');
-const presenceTextEl = document.getElementById('presenceText');
-const pilotsPanel = document.getElementById('pilotsPanel');
-
-function updatePresenceIndicator() {
-    const count = Object.keys(activePeers).length;
-    if (count > 0) {
-        presenceEl.classList.remove('solo');
-        presenceEl.classList.add('multi');
-        presenceTextEl.textContent = `Multi (${count + 1})`;
-    } else {
-        presenceEl.classList.remove('multi');
-        presenceEl.classList.add('solo');
-        presenceTextEl.textContent = 'Solo';
-    }
-    renderPilotsPanel();
-}
-
-function renderPilotsPanel() {
-    pilotsPanel.innerHTML = '';
-    const peers = Object.keys(activePeers);
-    if (peers.length === 0) return;
-    for (const peerId of peers) {
-        const row = document.createElement('div');
-        row.className = 'pilotRow';
-        const name = document.createElement('span');
-        name.className = 'name';
-        name.textContent = peerId;
-        row.appendChild(name);
-        const freezeBtn = document.createElement('button');
-        freezeBtn.textContent = 'Freeze';
-        freezeBtn.addEventListener('click', () => tryFreeze(peerId));
-        row.appendChild(freezeBtn);
-        const sendBtn = document.createElement('button');
-        sendBtn.textContent = 'Send';
-        sendBtn.addEventListener('click', () => openSendTo(peerId));
-        row.appendChild(sendBtn);
-        pilotsPanel.appendChild(row);
-    }
-}
-
-function connectMqtt() {
-    try {
-        client = mqtt.connect(BROKER, { clientId, reconnectPeriod: 5000, connectTimeout: 5000, keepalive: 60 });
-    } catch(e) { return; }
-    client.on('connect', () => {
-        client.subscribe(TOPIC_PRESENCE, { qos: 0 });
-        client.subscribe(TOPIC_CHAT, { qos: 0 });
-        client.subscribe(TOPIC_ECON, { qos: 1 });
-        client.subscribe(TOPIC_BUILD, { qos: 1 });
-        client.subscribe(TOPIC_FREEZE, { qos: 1 });
-        client.subscribe(TOPIC_VOICE, { qos: 0 });
-        client.subscribe(TOPIC_ROUTE, { qos: 1 });
-        startHeartbeats();
-    });
-    client.on('close', () => { stopHeartbeats(); for (const k in activePeers) delete activePeers[k]; updatePresenceIndicator(); });
-    client.on('message', (topic, payload) => {
-        let p; try { p = JSON.parse(payload.toString()); } catch(e) { return; }
-        if (p.sid === clientId) return;
-        if (topic === TOPIC_PRESENCE && p.type === 'PING') {
-            activePeers[p.sender] = Date.now();
-            rememberPeer(p.sender);
-            updatePresenceIndicator();
-            if (document.getElementById('statsSheet').classList.contains('show')) renderSendSection();
-            return;
-        }
-        if (topic === TOPIC_CHAT && p.type === 'CHAT') { addChatMessage(p.sender, p.text); return; }
-        if (topic === TOPIC_ECON && p.type === 'TX') { handleIncomingTx(p); return; }
-        if (topic === TOPIC_BUILD && p.type === 'BUILD') { handleRemoteBuild(p); return; }
-        if (topic === TOPIC_FREEZE && p.type === 'FREEZE' && p.target === myId) { handleFreeze(p); return; }
-        if (topic === TOPIC_VOICE) { handleVoiceSignal(p); return; }
-        if (topic === TOPIC_ROUTE && p.type === 'ROUTE_CREATE') { handleRemoteRoute(p); return; }
-    });
-}
-
-let pingTimer = null, pruneTimer = null;
-function startHeartbeats() { stopHeartbeats(); sendPing(); pingTimer = setInterval(sendPing, 5000); pruneTimer = setInterval(prunePeers, 3000); }
-function stopHeartbeats() {
-    if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
-    if (pruneTimer) { clearInterval(pruneTimer); pruneTimer = null; }
-}
-function sendPing() { if (client && client.connected) client.publish(TOPIC_PRESENCE, JSON.stringify({ type: 'PING', sender: myId, sid: clientId }), { qos: 0 }); }
-function prunePeers() {
-    const now = Date.now(); let changed = false;
-    for (const k in activePeers) if (now - activePeers[k] > 12000) { delete activePeers[k]; changed = true; }
-    if (changed) updatePresenceIndicator();
-}
-updatePresenceIndicator();
-
-// =========================================================
-// ЧАТ
-// =========================================================
-const chatLogEl = document.getElementById('chatLog');
+const peerIdInput = document.getElementById('peerIdInput');
+const presenceBadge = document.getElementById('presenceBadge');
+const tokenBalanceEl = document.getElementById('tokenBalanceEl');
+const chatFeed = document.getElementById('chatFeed');
 const chatInput = document.getElementById('chatInput');
-const chatSend = document.getElementById('chatSend');
+const attackBtn = document.getElementById('attackBtn');
+const reticleMenu = document.getElementById('reticleMenu');
 
-function addChatMessage(who, text) {
-    const msg = document.createElement('div'); msg.className = 'msg';
-    const w = document.createElement('span'); w.className = 'who'; w.textContent = who + ': ';
-    const t = document.createElement('span'); t.className = 'txt'; t.textContent = text;
-    msg.appendChild(w); msg.appendChild(t);
-    chatLogEl.appendChild(msg);
-    chatLogEl.scrollTop = chatLogEl.scrollHeight;
-}
-function sendChatMessage() {
-    const text = chatInput.value.trim();
-    if (!text) return;
-    addChatMessage(myId, text);
-    if (client && client.connected) client.publish(TOPIC_CHAT, JSON.stringify({ type: 'CHAT', sender: myId, sid: clientId, text }), { qos: 0 });
-    chatInput.value = ''; chatInput.blur();
-}
-chatSend.addEventListener('click', sendChatMessage);
-chatInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendChatMessage(); } });
+peerIdInput.value = myPeerId;
+tokenBalanceEl.textContent = Number.isInteger(tokens) ? tokens : tokens.toFixed(1);
 
-// =========================================================
-// VOICE CHAT
-// =========================================================
-const peerConnections = {};
-const remoteAudio = {};
-let localStream = null;
-let voiceEnabled = false;
-const voiceBtn = document.getElementById('voiceBtn');
-
-async function enableVoice() {
-    if (localStream) return true;
-    try { localStream = await navigator.mediaDevices.getUserMedia({ audio: true }); return true; }
-    catch(e) { toast('Microphone access denied', 'error'); return false; }
-}
-voiceBtn.addEventListener('pointerdown', async (e) => {
-    e.preventDefault();
-    if (!voiceEnabled) {
-        const ok = await enableVoice();
-        if (!ok) return;
-        voiceEnabled = true;
-        voiceBtn.classList.add('active');
-        for (const peerId in activePeers) initiateVoiceOffer(peerId);
-    }
-    if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = true);
+document.getElementById('startButton').addEventListener('click', () => {
+  document.getElementById('startButton').style.display = 'none';
+  if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+  else if (document.documentElement.webkitRequestFullscreen) document.documentElement.webkitRequestFullscreen();
+  if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
 });
-voiceBtn.addEventListener('pointerup', (e) => { e.preventDefault(); if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = false); });
-voiceBtn.addEventListener('pointerleave', () => { if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = false); });
 
-function publishVoiceSignal(target, signal) {
-    if (!client || !client.connected) return;
-    client.publish(TOPIC_VOICE, JSON.stringify({ type: 'VOICE', from: myId, to: target, sid: clientId, signal }), { qos: 0 });
-}
-const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
-function createPeerConnection(peerId) {
-    if (peerConnections[peerId]) return peerConnections[peerId];
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-    peerConnections[peerId] = pc;
-    pc.onicecandidate = (e) => { if (e.candidate) publishVoiceSignal(peerId, { type: 'ice', candidate: e.candidate }); };
-    pc.ontrack = (e) => {
-        if (!remoteAudio[peerId]) { const audio = new Audio(); audio.autoplay = true; remoteAudio[peerId] = audio; }
-        remoteAudio[peerId].srcObject = e.streams[0];
-    };
-    pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'failed' || pc.connectionState === 'closed') { pc.close(); delete peerConnections[peerId]; }
-    };
-    if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-    return pc;
-}
-async function initiateVoiceOffer(peerId) {
-    const pc = createPeerConnection(peerId);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    publishVoiceSignal(peerId, { type: 'offer', sdp: offer });
-}
-async function handleVoiceSignal(p) {
-    if (p.to !== myId) return;
-    const peerId = p.from;
-    if (!voiceEnabled) {
-        const ok = await enableVoice();
-        if (!ok) return;
-        voiceEnabled = true;
-        voiceBtn.classList.add('active');
-    }
-    const pc = createPeerConnection(peerId);
-    const sig = p.signal;
-    if (sig.type === 'offer') {
-        await pc.setRemoteDescription(sig.sdp);
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        publishVoiceSignal(peerId, { type: 'answer', sdp: answer });
-    } else if (sig.type === 'answer') {
-        if (pc.signalingState !== 'stable') await pc.setRemoteDescription(sig.sdp);
-    } else if (sig.type === 'ice') {
-        try { await pc.addIceCandidate(sig.candidate); } catch(e) {}
-    }
-}
-
-// =========================================================
-// ECONOMY: freeze
-// =========================================================
-const freezeCooldowns = {};
-const frozenUntil = {};
-function tryFreeze(target) {
-    if (target === myId) return;
-    if (!activePeers[target]) return;
-    if (Stats.data.balance < 1) { toast('Not enough JP (1 required)', 'error'); return; }
-    const now = Date.now();
-    if (freezeCooldowns[target] && now - freezeCooldowns[target] < 30000) {
-        toast(`Wait ${Math.ceil((30000 - (now - freezeCooldowns[target])) / 1000)}s to freeze ${target}`, 'warn');
-        return;
-    }
-    Stats.add(-1, `freeze ${target}`);
-    freezeCooldowns[target] = now;
-    const until = now + 5000;
-    if (client && client.connected) {
-        client.publish(TOPIC_FREEZE, JSON.stringify({ type: 'FREEZE', from: myId, target, until, sid: clientId }), { qos: 1 });
-    }
-    toast(`Froze ${target} (5s)`, 'success');
-}
-function handleFreeze(p) {
-    frozenUntil[myId] = p.until;
-    const remaining = Math.max(0, p.until - Date.now());
-    if (remaining <= 0) return;
-    velocity.set(0, 0, 0);
-    angularVelocityX = 0; angularVelocityZ = 0;
-    const overlay = document.getElementById('frozenOverlay');
-    const msg = document.getElementById('frozenMsg');
-    msg.textContent = `FROZEN by ${p.from}`;
-    overlay.classList.add('show');
-    setTimeout(() => overlay.classList.remove('show'), remaining);
-}
-function isFrozen() { return frozenUntil[myId] && Date.now() < frozenUntil[myId]; }
-
-// =========================================================
-// SEND TOKENS (1% fee → author, HMAC-protected)
-// =========================================================
-const knownPeers = new Set(loadLSJson('jp_known_peers', []));
-function rememberPeer(id) {
-    if (!id || id === myId) return;
-    if (!knownPeers.has(id)) {
-        knownPeers.add(id);
-        saveLSJson('jp_known_peers', Array.from(knownPeers).slice(-100));
-    }
-}
-
-const sendCooldowns = {};
-const sendToInput = document.getElementById('sendToInput');
-const sendAmountInput = document.getElementById('sendAmountInput');
-const sendFeeLine = document.getElementById('sendFeeLine');
-const sendTokensBtn = document.getElementById('sendTokensBtn');
-const pilotsDatalist = document.getElementById('pilotsDatalist');
-
-function computeFee(amount) { return Math.max(1, Math.ceil(amount * FEE_RATE)); }
-
-function renderSendSection() {
-    const active = Object.keys(activePeers);
-    const others = Array.from(knownPeers).filter(p => !activePeers[p]);
-    pilotsDatalist.innerHTML = '';
-    for (const p of [...active, ...others]) {
-        const opt = document.createElement('option');
-        opt.value = p;
-        opt.label = activePeers[p] ? 'online' : 'offline';
-        pilotsDatalist.appendChild(opt);
-    }
-    validateSendForm();
-}
-
-function validateSendForm() {
-    const to = sendToInput.value.trim();
-    const amount = parseInt(sendAmountInput.value, 10) || 0;
-    const fee = computeFee(amount);
-    const total = amount + fee;
-
-    if (amount > 0) {
-        sendFeeLine.textContent = `Fee 1%: ${fee} JP → author · total ${total} JP`;
-        sendFeeLine.classList.toggle('insufficient', total > Stats.data.balance);
-    } else {
-        sendFeeLine.textContent = 'Fee 1%: —';
-        sendFeeLine.classList.remove('insufficient');
-    }
-
-    const valid =
-        to.length > 0 &&
-        to !== myId &&
-        /^[A-Za-z0-9_\-]{3,16}$/.test(to) &&
-        amount >= 1 &&
-        total <= Stats.data.balance;
-    sendTokensBtn.disabled = !valid;
-}
-
-async function doSendTokens() {
-    const to = sendToInput.value.trim();
-    const amount = parseInt(sendAmountInput.value, 10) || 0;
-    if (!to || to === myId) { toast('Invalid recipient', 'error'); return; }
-    if (!/^[A-Za-z0-9_\-]{3,16}$/.test(to)) { toast('Invalid recipient ID', 'error'); return; }
-    if (amount < 1) { toast('Amount must be ≥ 1', 'error'); return; }
-    const fee = computeFee(amount);
-    const total = amount + fee;
-    if (!Stats.canAfford(total)) { toast(`Need ${total} JP (have ${Stats.data.balance})`, 'error'); return; }
-
-    const now = Date.now();
-    const cds = (sendCooldowns[to] || []).filter(t => now - t < 60000);
-    if (cds.length >= 3) { toast(`Too many transfers to ${to} this minute`, 'warn'); return; }
-    cds.push(now);
-    sendCooldowns[to] = cds;
-
-    const isOnline = !!activePeers[to];
-    const isKnown = knownPeers.has(to);
-
-    Stats.add(-total, `send ${amount} to ${to} (+${fee} fee)`);
-
-    if (client && client.connected) {
-        const txMain = { type: 'TX', from: myId, to, amount, sid: clientId, ts: now, txId: 'tx-' + now + '-' + Math.random().toString(16).slice(2, 8) };
-        txMain.sig = await signTx(txMain);
-        client.publish(TOPIC_ECON, JSON.stringify(txMain), { qos: 1 });
-
-        const txFee = { type: 'TX', from: myId, to: AUTHOR_ID, amount: fee, sid: clientId, ts: now + 1, txId: 'txf-' + now + '-' + Math.random().toString(16).slice(2, 8), isFee: true };
-        txFee.sig = await signTx(txFee);
-        client.publish(TOPIC_ECON, JSON.stringify(txFee), { qos: 1 });
-    }
-
-    if (isOnline) {
-        toast(`Sent ${amount} JP to ${to} (${fee} fee)`, 'success');
-    } else if (isKnown) {
-        toast(`Sent ${amount} JP to ${to} (offline — best-effort delivery)`, 'warn', 4500);
-    } else {
-        toast(`Sent to unknown ID ${to} — delivery not guaranteed`, 'warn', 4500);
-    }
-
-    sendAmountInput.value = '';
-    validateSendForm();
-    refreshStats();
-}
-
-sendToInput.addEventListener('input', validateSendForm);
-sendAmountInput.addEventListener('input', validateSendForm);
-sendTokensBtn.addEventListener('click', doSendTokens);
-
-function openSendTo(target) {
-    if (target === myId) return;
-    statsSheet.classList.add('show');
-    refreshStats();
-    sendToInput.value = target;
-    validateSendForm();
-    sendAmountInput.focus();
-}
-
-async function handleIncomingTx(p) {
-    if (p.to !== myId) return;
-    if (!p.txId || seenTxIds.has(p.txId)) return;
-    const ok = await verifyTx(p);
-    if (!ok) {
-        toast('⚠ Rejected unverified transaction', 'error', 3000);
-        return;
-    }
-    seenTxIds.add(p.txId);
-    if (seenTxIds.size > 1000) seenTxIds.clear();
-    Stats.add(p.amount, `received from ${p.from}`);
-    toast(`+${p.amount} JP from ${p.from}`, 'success');
-}
-
-async function handleFeeTx(p) {
-    if (p.to !== myId) return;
-    if (!p.isFee) return;
-    if (!p.txId || seenTxIds.has(p.txId)) return;
-    const ok = await verifyTx(p);
-    if (!ok) return;
-    seenTxIds.add(p.txId);
-    Stats.add(p.amount, `fee from ${p.from}`);
-}
-
-// =========================================================
-// НАРУШЕНИЯ
-// =========================================================
-const violationState = { count: 0, lastTs: 0, buildLockUntil: 0 };
-const VIOLATION_RESET_MS = 30000;
-function registerViolation() {
-    const now = Date.now();
-    if (now - violationState.lastTs > VIOLATION_RESET_MS) violationState.count = 0;
-    violationState.lastTs = now;
-    violationState.count++;
-    Stats.data.violations++;
-    Stats.save();
-    if (violationState.count === 1) {
-        frozenUntil[myId] = now + 2000;
-        velocity.set(0, 0, 0);
-        toast('⚠ You flew through a house. Next time — 1 JP fine.', 'warn', 4000);
-    } else if (violationState.count === 2) {
-        Stats.add(-1, 'violation fine (1)');
-        toast('⚠ Violation again. −1 JP.', 'error', 4000);
-    } else if (violationState.count === 3) {
-        Stats.add(-3, 'violation fine (3)');
-        toast('⚠ Third violation. −3 JP.', 'error', 4000);
-    } else {
-        violationState.buildLockUntil = now + 10000;
-        toast('⛔ Build locked for 10s.', 'error', 4000);
-    }
-}
-
-// =========================================================
-// Управление
-// =========================================================
 let currentThrottle = 0;
 let touchJoystick = { active: false, startX: 0, startY: 0, moveX: 0, moveY: 0 };
+const isReverseThrust = true;
+
 const throttleArea = document.getElementById('throttleArea');
 const controlArea = document.getElementById('controlArea');
 const activeTouches = { throttle: null, control: null };
 
-throttleArea.addEventListener('pointerdown', (e) => {
-    if (e.pointerType === 'mouse') return;
-    activeTouches.throttle = e.pointerId; updateThrottle(e);
-}, { passive: false });
-function updateThrottle(e) {
-    const rect = throttleArea.getBoundingClientRect();
-    const cy = rect.top + rect.height / 2;
-    if (e.clientY < cy) currentThrottle = 1 - ((e.clientY - rect.top) / (rect.height / 2));
-    else currentThrottle = -((e.clientY - cy) / (rect.height / 2));
-    currentThrottle = Math.max(-1, Math.min(1, currentThrottle));
+function updateThrottle(e){
+  const rect = throttleArea.getBoundingClientRect();
+  const centerY = rect.top + rect.height / 2;
+  currentThrottle = e.clientY < centerY
+    ? 1 - ((e.clientY - rect.top) / (rect.height / 2))
+    : -((e.clientY - centerY) / (rect.height / 2));
+  currentThrottle = Math.max(-1, Math.min(1, currentThrottle));
 }
+throttleArea.addEventListener('pointerdown', (e) => {
+  throttleArea.setPointerCapture(e.pointerId);
+  activeTouches.throttle = e.pointerId;
+  updateThrottle(e);
+});
+throttleArea.addEventListener('pointermove', (e) => {
+  if (e.pointerId === activeTouches.throttle) updateThrottle(e);
+});
+const resetThrottle = (e) => {
+  if (e.pointerId === activeTouches.throttle){
+    throttleArea.releasePointerCapture(e.pointerId);
+    activeTouches.throttle = null;
+    currentThrottle = 0;
+  }
+};
+throttleArea.addEventListener('pointerup', resetThrottle);
+throttleArea.addEventListener('pointercancel', resetThrottle);
+
 controlArea.addEventListener('pointerdown', (e) => {
-    if (e.pointerType === 'mouse') return;
-    activeTouches.control = e.pointerId;
-    touchJoystick.active = true;
-    touchJoystick.startX = e.clientX; touchJoystick.startY = e.clientY;
-    touchJoystick.moveX = 0; touchJoystick.moveY = 0;
-}, { passive: false });
-window.addEventListener('pointermove', (e) => {
-    if (e.pointerId === activeTouches.throttle) updateThrottle(e);
-    if (e.pointerId === activeTouches.control && touchJoystick.active) {
-        const md = 100;
-        touchJoystick.moveX = Math.max(-1, Math.min(1, (e.clientX - touchJoystick.startX) / md));
-        touchJoystick.moveY = Math.max(-1, Math.min(1, (e.clientY - touchJoystick.startY) / md));
-    }
+  controlArea.setPointerCapture(e.pointerId);
+  activeTouches.control = e.pointerId;
+  touchJoystick.active = true;
+  touchJoystick.startX = e.clientX;
+  touchJoystick.startY = e.clientY;
+  touchJoystick.moveX = 0;
+  touchJoystick.moveY = 0;
 });
-window.addEventListener('pointerup', (e) => {
-    if (e.pointerId === activeTouches.throttle) { activeTouches.throttle = null; currentThrottle = 0; }
-    if (e.pointerId === activeTouches.control) { activeTouches.control = null; touchJoystick.active = false; touchJoystick.moveX = 0; touchJoystick.moveY = 0; }
+controlArea.addEventListener('pointermove', (e) => {
+  if (e.pointerId === activeTouches.control && touchJoystick.active){
+    const maxDistance = 100;
+    touchJoystick.moveX = Math.max(-1, Math.min(1, (e.clientX - touchJoystick.startX) / maxDistance));
+    touchJoystick.moveY = Math.max(-1, Math.min(1, (e.clientY - touchJoystick.startY) / maxDistance));
+  }
 });
+const resetJoystick = (e) => {
+  if (e.pointerId === activeTouches.control){
+    controlArea.releasePointerCapture(e.pointerId);
+    activeTouches.control = null;
+    touchJoystick.active = false;
+    touchJoystick.moveX = 0;
+    touchJoystick.moveY = 0;
+  }
+};
+controlArea.addEventListener('pointerup', resetJoystick);
+controlArea.addEventListener('pointercancel', resetJoystick);
+window.addEventListener('dragstart', (e) => e.preventDefault());
 
-const FLY_SPEED = 0.010;
-const TURN_SPEED = 0.00028;
-const TOUCH_TURN_SPEED = 0.00045;
-const GRAVITY = 0.007;
-const DAMPING_TURN = 0.96;
-const DAMPING_MOVE = 0.98;
-
-document.getElementById('startButton').addEventListener('click', () => {
-    document.getElementById('startButton').style.display = 'none';
-    if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
-    if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
-});
-
-// =========================================================
-// Сцена
-// =========================================================
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x05050c);
-scene.fog = new THREE.FogExp2(0x05050c, 0.0012);
+scene.background = new THREE.Color(0x0a0a12);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 24000);
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 3000);
 const player = new THREE.Group();
-player.position.set(0, 40, 120);
-player.rotation.order = 'YXZ';
+player.position.set(0, 0, 0);
 scene.add(player);
+camera.quaternion.setFromEuler(new THREE.Euler(Math.PI, 0, 0, 'YXZ'));
 player.add(camera);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.xr.enabled = true;
-renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 document.body.appendChild(renderer.domElement);
 
 window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-scene.add(new THREE.AmbientLight(0x223344, 1.2));
-const keyLight = new THREE.DirectionalLight(0x88aaff, 1.6); keyLight.position.set(80, 200, 60); scene.add(keyLight);
-const fillLight = new THREE.DirectionalLight(0xff99cc, 0.6); fillLight.position.set(-120, 80, -60); scene.add(fillLight);
-const rimLight = new THREE.DirectionalLight(0x66ffcc, 0.5); rimLight.position.set(-40, 120, 180); scene.add(rimLight);
+scene.add(new THREE.AmbientLight(0x94a3b8, 1.35));
+const sunLight = new THREE.DirectionalLight(0xffffff, 2.4);
+sunLight.position.set(900, 2200, 700);
+scene.add(sunLight);
+const rimLight = new THREE.DirectionalLight(0x7dd3fc, 1.0);
+rimLight.position.set(-1200, -1600, -900);
+scene.add(rimLight);
 
-// =========================================================
-// ГОРОД
-// =========================================================
-const CITY_RADIUS = 340;
-const CITY_SOFT_EDGE = 500;
-const collidableObjects = [];
-const buildingBounds = [];
-const roofColliders = [];
+/* =========================================================
+   SPHERE PLANET AT RADIUS 1500 — WIRE ONLY WITH DISTANCE FADE
+   ========================================================= */
+const planetGeometry = new THREE.SphereGeometry(PLANET_RADIUS, 72, 54);
 
-const facadeMatA = new THREE.MeshPhongMaterial({ color: 0x0e1220, shininess: 40, specular: 0x1a2030 });
-const facadeMatB = new THREE.MeshPhongMaterial({ color: 0x121020, shininess: 40, specular: 0x201830 });
-const facadeMatC = new THREE.MeshPhongMaterial({ color: 0x0e1a1a, shininess: 40, specular: 0x102020 });
-const facadeMats = [facadeMatA, facadeMatB, facadeMatC];
-const matRoof = new THREE.MeshPhongMaterial({ color: 0x0a0a14, shininess: 10 });
-const matRoad = new THREE.MeshPhongMaterial({ color: 0x121218, emissive: 0x1a1030, emissiveIntensity: 0.55 });
-const matSidewalk = new THREE.MeshPhongMaterial({ color: 0x1a1a24 });
-const matTrunk = new THREE.MeshPhongMaterial({ color: 0x2a2018 });
-const matLeaves = new THREE.MeshPhongMaterial({ color: 0x1a3a24, shininess: 5 });
-const matLandmark = new THREE.MeshPhongMaterial({ color: 0x1a1a2a, shininess: 30 });
-const matArch = new THREE.MeshPhongMaterial({ color: 0x141a24, shininess: 15 });
-const matBridge = new THREE.MeshPhongMaterial({ color: 0x181822, shininess: 20 });
-
-const NEON_COLORS = [0x00e5ff, 0x7b4dff, 0xff3da0, 0x4ade80, 0xffd166, 0x60a5fa, 0xff6b35];
-
-function mulberry32(a) {
-    return function() {
-        a |= 0; a = a + 0x6D2B79F5 | 0;
-        let t = Math.imul(a ^ a >>> 15, 1 | a);
-        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-        return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    };
-}
-const rand = mulberry32(20250101);
-
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshPhongMaterial({ color: 0x08080f }));
-ground.rotation.x = -Math.PI / 2;
-ground.position.y = -0.5;
-scene.add(ground);
-
-function urbanDensity(x, z) {
-    const d = Math.sqrt(x * x + z * z);
-    if (d < 40) return 1.0;
-    if (d > CITY_SOFT_EDGE) return 0.0;
-    const t = (d - 40) / (CITY_SOFT_EDGE - 40);
-    return Math.max(0, 1 - t * t);
-}
-
-const routeCorridors = [];
-function isInAnyCorridor(x, z) {
-    for (const c of routeCorridors) {
-        if (c.type === 'ring') {
-            const d = Math.sqrt((x - c.cx) ** 2 + (z - c.cz) ** 2);
-            if (Math.abs(d - c.r) < c.clearance) return true;
-        } else if (c.type === 'square') {
-            const dx = Math.abs(x - c.cx), dz = Math.abs(z - c.cz);
-            if (Math.abs(Math.max(dx, dz) - c.half) < c.clearance) return true;
-        } else if (c.type === 'poly') {
-            for (let i = 0; i < c.points.length; i++) {
-                const a = c.points[i], b = c.points[(i + 1) % c.points.length];
-                const dist = pointToSegmentDist(x, z, a.x, a.z, b.x, b.z);
-                if (dist < c.clearance) return true;
-            }
-        }
+const planetMaterial = new THREE.ShaderMaterial({
+  wireframe: false,
+  transparent: true,
+  side: THREE.DoubleSide,
+  uniforms: {
+    uSize: { value: 0.05 }
+  },
+  vertexShader: `
+    varying vec3 vWorldPosition;
+    void main(){
+      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+      vWorldPosition = worldPosition.xyz;
+      gl_Position = projectionMatrix * viewMatrix * worldPosition;
     }
-    return false;
-}
-function pointToSegmentDist(px, pz, ax, az, bx, bz) {
-    const dx = bx - ax, dz = bz - az;
-    const len2 = dx * dx + dz * dz;
-    if (len2 === 0) return Math.sqrt((px - ax) ** 2 + (pz - az) ** 2);
-    let t = ((px - ax) * dx + (pz - az) * dz) / len2;
-    t = Math.max(0, Math.min(1, t));
-    const cx = ax + t * dx, cz = az + t * dz;
-    return Math.sqrt((px - cx) ** 2 + (pz - cz) ** 2);
-}
-
-function addBuilding(cx, cz, w, d, h, facadeMat, isUserBuilt = false) {
-    const group = new THREE.Group();
-    group.position.set(cx, 0, cz);
-    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), facadeMat || facadeMats[0]);
-    body.position.y = h / 2;
-    group.add(body);
-    collidableObjects.push(body);
-
-    const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d));
-    const neonColor = isUserBuilt ? 0xffd166 : NEON_COLORS[Math.floor(rand() * NEON_COLORS.length)];
-    const lineMat = new THREE.LineBasicMaterial({ color: neonColor, transparent: true, opacity: 0.85 });
-    const lines = new THREE.LineSegments(edges, lineMat);
-    lines.position.y = h / 2;
-    group.add(lines);
-
-    const roofEdges = new THREE.EdgesGeometry(new THREE.BoxGeometry(w + 0.6, 1.2, d + 0.6));
-    const roofLines = new THREE.LineSegments(roofEdges, lineMat.clone());
-    roofLines.material.opacity = 0.6;
-    roofLines.position.y = h + 0.6;
-    group.add(roofLines);
-
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.6, 1.2, d + 0.6), matRoof);
-    roof.position.y = h + 0.6;
-    group.add(roof);
-
-    scene.add(group);
-
-    const bounds = new THREE.Box3(
-        new THREE.Vector3(cx - w/2, 0, cz - d/2),
-        new THREE.Vector3(cx + w/2, h + 1.2, cz + d/2)
-    );
-    buildingBounds.push(bounds);
-
-    const roofTopY = h + 1.2;
-    const roofBox = new THREE.Box3(
-        new THREE.Vector3(cx - w/2 - 0.3, roofTopY - 0.6, cz - d/2 - 0.3),
-        new THREE.Vector3(cx + w/2 + 0.3, roofTopY, cz + d/2 + 0.3)
-    );
-    roofColliders.push({ box: roofBox, topY: roofTopY, cx, cz, w: w + 0.6, d: d + 0.6 });
-
-    return group;
-}
-
-function addTree(x, z, size = 1) {
-    const trunkH = 3 * size;
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35 * size, 0.5 * size, trunkH, 6), matTrunk);
-    trunk.position.set(x, trunkH / 2, z);
-    scene.add(trunk); collidableObjects.push(trunk);
-    const crownH = 4 * size;
-    const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(crownH * 0.8, 0), matLeaves);
-    crown.position.set(x, trunkH + crownH * 0.55, z);
-    scene.add(crown); collidableObjects.push(crown);
-    const canopyCollider = new THREE.Mesh(new THREE.BoxGeometry(crownH * 1.3, crownH * 1.3, crownH * 1.3), new THREE.MeshBasicMaterial({ visible: false }));
-    canopyCollider.position.set(x, trunkH + crownH * 0.55, z);
-    scene.add(canopyCollider); collidableObjects.push(canopyCollider);
-    const patch = new THREE.Mesh(new THREE.CircleGeometry(crownH * 0.9, 12), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3 }));
-    patch.rotation.x = -Math.PI / 2; patch.position.set(x, 0.02, z); scene.add(patch);
-}
-
-const lampLights = [];
-function addLamp(x, z) {
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 6, 6), matSidewalk);
-    pole.position.set(x, 3, z); scene.add(pole);
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffe9a8 }));
-    bulb.position.set(x, 6.2, z); scene.add(bulb);
-    const glowCanvas = document.createElement('canvas'); glowCanvas.width = 64; glowCanvas.height = 64;
-    const gctx = glowCanvas.getContext('2d');
-    const grd = gctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    grd.addColorStop(0, 'rgba(255,233,168,0.9)');
-    grd.addColorStop(0.4, 'rgba(255,233,168,0.35)');
-    grd.addColorStop(1, 'rgba(255,233,168,0)');
-    gctx.fillStyle = grd; gctx.fillRect(0, 0, 64, 64);
-    const glowTex = new THREE.CanvasTexture(glowCanvas);
-    const glowSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-    glowSprite.scale.set(8, 8, 1); glowSprite.position.set(x, 6.2, z); scene.add(glowSprite);
-    if (lampLights.length < 20 && rand() < 0.4) {
-        const pl = new THREE.PointLight(0xffe9a8, 1.2, 30, 2);
-        pl.position.set(x, 6.2, z); scene.add(pl); lampLights.push(pl);
+  `,
+  fragmentShader: `
+    varying vec3 vWorldPosition;
+    uniform float uSize;
+    void main(){
+      vec2 p1 = vWorldPosition.xy * uSize;
+      vec2 p2 = vWorldPosition.zy * uSize;
+      vec2 grid = abs(fract(p1 - 0.5) - 0.5) / max(fwidth(p1), 0.0001);
+      vec2 grid2 = abs(fract(p2 - 0.5) - 0.5) / max(fwidth(p2), 0.0001);
+      float line = min(min(grid.x, grid.y), min(grid2.x, grid2.y));
+      float thinLine = 1.0 - min(line / 0.65, 1.0);
+      float dist = length(vWorldPosition - cameraPosition);
+      float farFade = 1.0 - smoothstep(220.0, 2200.0, dist);
+      float alpha = thinLine * farFade * 0.85;
+      if (alpha < 0.01) discard;
+      gl_FragColor = vec4(0.24, 0.36, 0.92, alpha);
     }
-}
-
-function addArch(x, z, span, height, thickness, rotY = 0) {
-    const group = new THREE.Group();
-    group.position.set(x, 0, z); group.rotation.y = rotY;
-    const neonColor = NEON_COLORS[Math.floor(rand() * NEON_COLORS.length)];
-    const lineMat = new THREE.LineBasicMaterial({ color: neonColor, transparent: true, opacity: 0.9 });
-    function part(w, h, d, ox, oy, oz) {
-        const geo = new THREE.BoxGeometry(w, h, d);
-        const mesh = new THREE.Mesh(geo, matArch); mesh.position.set(ox, oy, oz); group.add(mesh);
-        const lines = new THREE.LineSegments(new THREE.EdgesGeometry(geo), lineMat.clone()); lines.position.set(ox, oy, oz); group.add(lines);
-        return mesh;
-    }
-    const left = part(thickness, height, thickness, -span / 2, height / 2, 0);
-    const right = part(thickness, height, thickness, span / 2, height / 2, 0);
-    const top = part(span + thickness, thickness * 1.4, thickness, 0, height + thickness * 0.7, 0);
-    const cornice = new THREE.Mesh(new THREE.BoxGeometry(span + thickness * 2, thickness * 0.5, thickness * 1.4), matLandmark);
-    cornice.position.set(0, height + thickness * 1.55, 0); group.add(cornice);
-    scene.add(group);
-    group.updateMatrixWorld(true);
-    left.updateMatrixWorld(true); right.updateMatrixWorld(true); top.updateMatrixWorld(true);
-    collidableObjects.push(left, right, top);
-    return group;
-}
-
-function addBridge(x1, z1, x2, z2, deckHeight, width = 8) {
-    const dx = x2 - x1, dz = z2 - z1;
-    const len = Math.sqrt(dx * dx + dz * dz);
-    const angle = Math.atan2(dz, dx);
-    const group = new THREE.Group();
-    group.position.set((x1 + x2) / 2, 0, (z1 + z2) / 2);
-    group.rotation.y = -angle;
-    const neonColor = NEON_COLORS[Math.floor(rand() * NEON_COLORS.length)];
-    const lineMat = new THREE.LineBasicMaterial({ color: neonColor, transparent: true, opacity: 0.85 });
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(len, 1.5, width), matBridge);
-    deck.position.set(0, deckHeight, 0); group.add(deck);
-    const deckLines = new THREE.LineSegments(new THREE.EdgesGeometry(deck.geometry), lineMat); deckLines.position.copy(deck.position); group.add(deckLines);
-    for (const side of [-1, 1]) {
-        const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.4, 0.4), matLandmark);
-        rail.position.set(0, deckHeight + 1.2, side * (width / 2 - 0.3)); group.add(rail);
-        const pc = Math.max(2, Math.floor(len / 8));
-        for (let i = 0; i <= pc; i++) {
-            const px = -len / 2 + (i / pc) * len;
-            const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.8, 0.3), matLandmark);
-            post.position.set(px, deckHeight + 0.5, side * (width / 2 - 0.3)); group.add(post);
-        }
-    }
-    for (const t of [-0.3, 0.3]) {
-        const px = t * len;
-        const pillar = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 2, deckHeight, 8), matBridge);
-        pillar.position.set(px, deckHeight / 2, 0); group.add(pillar);
-    }
-    scene.add(group);
-    group.updateMatrixWorld(true);
-    deck.updateMatrixWorld(true);
-    collidableObjects.push(deck);
-    return group;
-}
-
-function addLandmarkTower(x, z) {
-    const base = new THREE.Mesh(new THREE.BoxGeometry(28, 8, 28), matLandmark);
-    base.position.set(x, 4, z); scene.add(base); collidableObjects.push(base);
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(6, 8, 120, 8), matLandmark);
-    shaft.position.set(x, 8 + 60, z); scene.add(shaft); collidableObjects.push(shaft);
-    const top = new THREE.Mesh(new THREE.ConeGeometry(10, 20, 8), facadeMats[1]);
-    top.position.set(x, 8 + 120 + 10, z); scene.add(top);
-    const crownLight = new THREE.PointLight(0x00e5ff, 3, 150, 2);
-    crownLight.position.set(x, 8 + 120 + 5, z); scene.add(crownLight);
-}
-
-function addLandmarkDome(x, z) {
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(22, 24, 30, 12), matLandmark);
-    base.position.set(x, 15, z); scene.add(base); collidableObjects.push(base);
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(22, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), facadeMats[0]);
-    dome.position.set(x, 30, z); scene.add(dome); collidableObjects.push(dome);
-}
-
-// =========================================================
-// МАРШРУТЫ
-// =========================================================
-const routes = [];
-const matEnergy = new THREE.MeshBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.9 });
-
-function makeCheckpoint(pos, radius = 6, colorOverride = null) {
-    const mesh = new THREE.Mesh(new THREE.TorusGeometry(radius, radius * 0.12, 8, 24), new THREE.MeshBasicMaterial({ color: colorOverride || 0x4ade80, transparent: true, opacity: 0.85 }));
-    mesh.position.copy(pos); scene.add(mesh);
-    return { mesh, pos: pos.clone(), radius };
-}
-function makeEnergyOrb(pos) {
-    const orb = new THREE.Mesh(new THREE.SphereGeometry(1.2, 10, 8), matEnergy.clone());
-    orb.position.copy(pos); scene.add(orb);
-    return { mesh: orb, pos: pos.clone(), collected: false };
-}
-
-function buildRingRoute(name, radius, y, count, color, author = null, routeId = null) {
-    const checkpoints = [];
-    for (let i = 0; i < count; i++) {
-        const a = (i / count) * Math.PI * 2;
-const cp = makeCheckpoint(new THREE.Vector3(Math.cos(a) * radius, y, Math.sin(a) * radius), 12, color);
-        cp.mesh.rotation.y = -a; checkpoints.push(cp);
-    }
-    const energyOrbs = [];
-    for (let i = 0; i < count; i++) {
-        const a = ((i + 0.5) / count) * Math.PI * 2;
-        energyOrbs.push(makeEnergyOrb(new THREE.Vector3(Math.cos(a) * radius, y, Math.sin(a) * radius)));
-    }
-    const route = { name, checkpoints, energyOrbs, color, nextIndex: 0, started: false, startTime: 0, elapsed: 0,
-        completed: false, isRing: true, author, routeId,
-        corridor: { type: 'ring', cx: 0, cz: 0, r: radius, clearance: 25 } };
-    routes.push(route); routeCorridors.push(route.corridor);
-    return route;
-}
-
-function buildSquareRoute(name, half, y, color, author = null, routeId = null) {
-    const cpPts = []; const perSide = 3;
-    for (let side = 0; side < 4; side++) {
-        for (let i = 0; i < perSide; i++) {
-            const t = (i + 0.5) / perSide; let x, z;
-            if (side === 0) { x = -half + t * 2 * half; z = -half; }
-            else if (side === 1) { x = half; z = -half + t * 2 * half; }
-            else if (side === 2) { x = half - t * 2 * half; z = half; }
-            else { x = -half; z = half - t * 2 * half; }
-            cpPts.push({ x, z, side });
-        }
-    }
-    const checkpoints = [], energyOrbs = [];
-    for (let i = 0; i < cpPts.length; i++) {
-        const p = cpPts[i];
-const cp = makeCheckpoint(new THREE.Vector3(p.x, y, p.z), 12, color);
-        if (p.side === 0 || p.side === 2) cp.mesh.rotation.y = Math.PI / 2; else cp.mesh.rotation.y = 0;
-        checkpoints.push(cp);
-        const next = cpPts[(i + 1) % cpPts.length];
-        energyOrbs.push(makeEnergyOrb(new THREE.Vector3((p.x + next.x) / 2, y, (p.z + next.z) / 2)));
-    }
-    const route = { name, checkpoints, energyOrbs, color, nextIndex: 0, started: false, startTime: 0, elapsed: 0,
-        completed: false, isRing: false, author, routeId,
-        corridor: { type: 'square', cx: 0, cz: 0, half, clearance: 25 } };
-    routes.push(route); routeCorridors.push(route.corridor);
-    return route;
-}
-
-function buildPolyRoute(name, points, color, author, routeId) {
-const checkpoints = points.map(p => makeCheckpoint(new THREE.Vector3(p.x, p.y, p.z), 12, color));
-    for (let i = 0; i < checkpoints.length; i++) {
-        const a = checkpoints[i], b = checkpoints[(i + 1) % checkpoints.length];
-        const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
-        a.mesh.rotation.y = Math.atan2(dx, dz);
-    }
-    const energyOrbs = [];
-    for (let i = 0; i < points.length; i++) {
-        const a = points[i], b = points[(i + 1) % points.length];
-        energyOrbs.push(makeEnergyOrb(new THREE.Vector3((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2)));
-    }
-    const route = { name, checkpoints, energyOrbs, color, nextIndex: 0, started: false, startTime: 0, elapsed: 0,
-        completed: false, isRing: false, author, routeId,
-        corridor: { type: 'poly', points: points.map(p => ({ x: p.x, z: p.z })), clearance: 20 } };
-    routes.push(route); routeCorridors.push(route.corridor);
-    return route;
-}
-
-// =========================================================
-// ГОРОД
-// =========================================================
-function buildCity() {
-const roadSpacing = 55, roadRange = 480;
-    // светящиеся полосы по краям улиц
-    const roadGlowMat = new THREE.MeshBasicMaterial({ color: 0x3a6fff, transparent: true, opacity: 0.45 });
-    for (let x = -roadRange; x <= roadRange; x += roadSpacing) {
-        const rx = x + (rand() - 0.5) * 8;
-        const road = new THREE.Mesh(new THREE.BoxGeometry(10, 0.3, roadRange * 2), matRoad);
-        road.position.set(rx, 0.05, 0); scene.add(road);
-        for (const side of [-5.2, 5.2]) {
-            const strip = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.12, roadRange * 2), roadGlowMat);
-            strip.position.set(rx + side, 0.22, 0); scene.add(strip);
-        }
-    }
-    for (let z = -roadRange; z <= roadRange; z += roadSpacing) {
-        const rz = z + (rand() - 0.5) * 8;
-        const road = new THREE.Mesh(new THREE.BoxGeometry(roadRange * 2, 0.3, 10), matRoad);
-        road.position.set(0, 0.05, rz); scene.add(road);
-        for (const side of [-5.2, 5.2]) {
-            const strip = new THREE.Mesh(new THREE.BoxGeometry(roadRange * 2, 0.12, 0.6), roadGlowMat);
-            strip.position.set(0, 0.22, rz + side); scene.add(strip);
-        }
-    }
-
-    const placed = [];
-    const H_BASE = 6, H_EXP = 4.2, H_MAX_FACTOR = 30;
-    const PARK_R = 110;   // ← радиус парка в центре
-
-for (let x = -CITY_SOFT_EDGE; x <= CITY_SOFT_EDGE; x += 30) {
-        for (let z = -CITY_SOFT_EDGE; z <= CITY_SOFT_EDGE; z += 30) {
-            const density = urbanDensity(x, z);
-            if (density < 0.05) continue;
-            const nearX = Math.abs(((x + roadSpacing / 2) % roadSpacing) - roadSpacing / 2) < 9;
-            const nearZ = Math.abs(((z + roadSpacing / 2) % roadSpacing) - roadSpacing / 2) < 9;
-            if (nearX || nearZ) continue;
-if (isInAnyCorridor(x, z)) continue;
-            if (Math.sqrt(x*x + z*z) < PARK_R) continue;
-            if (rand() > density * 0.75 + 0.03) continue;   // ← домов меньше
-            let overlap = false;
-            for (const c of placed) if ((c.x - x) ** 2 + (c.z - z) ** 2 < 18 * 18) { overlap = true; break; }
-            if (overlap) continue;
-            const w = 8 + rand() * 10 + density * 12;
-            const d = 8 + rand() * 10 + density * 12;
-            const hf = Math.min(H_MAX_FACTOR, Math.exp(density * H_EXP));
-            const h = H_BASE * hf * (0.8 + rand() * 0.5);
-            addBuilding(x, z, w, d, h, facadeMats[Math.floor(rand() * facadeMats.length)]);
-            placed.push({ x, z });
-            if (rand() < 0.05 + (1 - density) * 0.35) addTree(x + (rand() - 0.5) * 20, z + (rand() - 0.5) * 20, 0.7 + rand() * (1.4 - density * 0.4));
-            if (density > 0.4 && rand() < 0.15) addLamp(x + (rand() - 0.5) * 15, z + (rand() - 0.5) * 15);
-        }
-    }
-    for (let i = 0; i < 800; i++) {
-        const a = rand() * Math.PI * 2;
-        const r = CITY_RADIUS + rand() * (CITY_SOFT_EDGE - CITY_RADIUS + 150);
-        const x = Math.cos(a) * r, z = Math.sin(a) * r;
-        if (urbanDensity(x, z) > 0.15) continue;
-        if (isInAnyCorridor(x, z)) continue;
-        addTree(x, z, 0.8 + rand() * 1.6);
-    }
-    addLandmarkTower(0, 0);
-    addLandmarkDome(-280, -280);
-    addLandmarkDome(280, 280);
-    addBuilding(-260, 240, 40, 40, 95, facadeMats[2]);
-    addBuilding(260, -240, 40, 40, 110, facadeMats[1]);
-
-    const archC = [[90, -100, 12, 40, 3, Math.PI / 4], [-120, 60, 10, 50, 2.5, -Math.PI / 6],
-        [200, 180, 14, 60, 3, Math.PI / 3], [-200, -160, 11, 45, 2.8, -Math.PI / 4],
-        [0, 180, 40, 55, 4, 0], [180, 0, 40, 55, 4, Math.PI / 2],
-        [-180, 0, 45, 60, 4.5, Math.PI / 2], [0, -180, 45, 60, 4.5, 0]];
-    for (const a of archC) if (!isInAnyCorridor(a[0], a[1])) addArch(...a);
-
-    const bridgeC = [[-140, 120, 140, 120, 45, 10], [120, -140, 120, 140, 55, 9], [-200, -100, -200, 100, 38, 8]];
-for (const b of bridgeC) {
-        const mx = (b[0] + b[2]) / 2, mz = (b[1] + b[3]) / 2;
-        if (!isInAnyCorridor(mx, mz) && !isInAnyCorridor(b[0], b[1]) && !isInAnyCorridor(b[2], b[3])) addBridge(...b);
-    }
-
-    buildCentralPark(PARK_R);
-}
-
-// ===== Центральный парк: деревья + большие арки (+1 JP за пролёт) =====
-const parkArches = [];
-function buildCentralPark(radius) {
-    // деревья по всему парку
-    for (let i = 0; i < 80; i++) {
-        const a = rand() * Math.PI * 2;
-        const r = 15 + rand() * (radius - 25);
-        addTree(Math.cos(a) * r, Math.sin(a) * r, 0.9 + rand() * 1.6);
-    }
-    // большие арки по кольцу внутри парка — пролёт даёт +1 JP
-    const archRingR = radius * 0.72;
-    const archCount = 6;
-    for (let i = 0; i < archCount; i++) {
-        const a = (i / archCount) * Math.PI * 2;
-        const x = Math.cos(a) * archRingR, z = Math.sin(a) * archRingR;
-        const rot = -a + Math.PI / 2;
-        addArch(x, z, 28, 42, 3, rot);
-        parkArches.push({ pos: new THREE.Vector3(x, 21, z), radius: 15, cooldownUntil: 0 });
-    }
-}
-
-// Lower — среди домов, самый малый радиус (R = 140)
-// Mid   — на уровне крыш (≈111), радиус ×2 от Lower (R = 280)
-// Upper — ×2 выше крыш (≈222), радиус ×2 от Mid (R = 560)
-buildRingRoute('Upper Ring (easy)', 560, 222, 20, 0x4ade80).jpPerPickup = 1;
-buildRingRoute('Mid Ring',         280, 111, 16, 0x60a5fa).jpPerPickup = 2;
-buildRingRoute('Lower Ring (hard)',140,  60, 12, 0xff3da0).jpPerPickup = 3;
-buildCity();
-restoreWorld();
-window.addEventListener('pagehide', () => { snapshotWorld(); });
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') snapshotWorld();
+  `
 });
-// =========================================================
-// HUD
-// =========================================================
-const routeNameEl = document.getElementById('routeName');
-const routeCPEl = document.getElementById('routeCP');
-const routeTimeEl = document.getElementById('routeTime');
-const routeEnergyEl = document.getElementById('routeEnergy');
-const boostTimeEl = document.getElementById('boostTime');
-let activeRoute = routes[0];
-let energyCount = 0;
-let boostTimer = 0;
 
-function setNextCheckpoint() {
-    for (let i = 0; i < activeRoute.checkpoints.length; i++) {
-        const cp = activeRoute.checkpoints[i];
-        if (i === activeRoute.nextIndex && !activeRoute.completed) { cp.mesh.material.color.set(0xffd166); cp.mesh.material.opacity = 0.95; }
-        else if (i < activeRoute.nextIndex) { cp.mesh.material.color.set(0x555555); cp.mesh.material.opacity = 0.35; }
-        else { cp.mesh.material.color.set(activeRoute.color); cp.mesh.material.opacity = 0.55; }
+const planetMesh = new THREE.Mesh(planetGeometry, planetMaterial);
+scene.add(planetMesh);
+
+/* =========================================================
+   SIX DIRECTIONS — ARCHITECTURAL CENTERS ON BOTH SIDES,
+   GROWING AS BUILDINGS INCREASE
+   ========================================================= */
+const collidableObjects = [planetMesh];
+const linePalette = [0x38bdf8, 0xf472b6, 0xfbbf24, 0x4ade80, 0xc084fc, 0xfb7185];
+
+const sixDirections = [
+  new THREE.Vector3(1, 0, 0).normalize(),
+  new THREE.Vector3(-1, 0, 0).normalize(),
+  new THREE.Vector3(0, 1, 0).normalize(),
+  new THREE.Vector3(0, -1, 0).normalize(),
+  new THREE.Vector3(0, 0, 1).normalize(),
+  new THREE.Vector3(0, 0, -1).normalize()
+];
+
+const archTypes = ['ziggurat', 'archgate', 'hexspire', 'domebeacon', 'pagoda', 'twinportal'];
+const centerSpecs = [];
+
+sixDirections.forEach((_, dirIndex) => {
+  const arch = archTypes[dirIndex % archTypes.length];
+  const color = linePalette[dirIndex % linePalette.length];
+  centerSpecs.push({
+    id: `c_out_${dirIndex}`,
+    arch,
+    dirIndex,
+    side: 1,
+    color,
+    influenceRadius: 320
+  });
+  centerSpecs.push({
+    id: `c_in_${dirIndex}`,
+    arch,
+    dirIndex,
+    side: -1,
+    color,
+    influenceRadius: 320
+  });
+});
+
+const centerObjects = [];
+const animatedGyroParts = [];
+
+function addArchAccentToParent(parent, archType, yOffset, scale, colorHex, registerAnim = false){
+  const mat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.55, metalness: 0.35 });
+  const edgeMat = new THREE.LineBasicMaterial({ color: colorHex });
+  const accentMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+  const holder = new THREE.Group();
+  holder.position.set(0, yOffset, 0);
+  holder.scale.setScalar(scale);
+
+  function part(geo, lx, ly, lz, rx = 0, ry = 0, rz = 0, accent = false){
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(lx, ly, lz);
+    m.rotation.set(rx, ry, rz);
+    m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 20), accent ? accentMat : edgeMat));
+    holder.add(m);
+    return m;
+  }
+
+  if (archType === 'ziggurat'){
+    part(new THREE.BoxGeometry(4.4, 1.1, 4.4), 0, 0.55, 0);
+    part(new THREE.BoxGeometry(2.8, 1.3, 2.8), 0, 1.75, 0);
+    part(new THREE.OctahedronGeometry(1.45, 0), 0, 3.6, 0, 0.3, 0.4, 0, true);
+    const ring = part(new THREE.TorusGeometry(2.4, 0.16, 8, 24), 0, 3.6, 0, Math.PI * 0.35, 0.2, 0);
+    if (registerAnim) animatedGyroParts.push({ obj: ring, speed: 0.015 });
+  } else if (archType === 'archgate'){
+    part(new THREE.BoxGeometry(0.9, 4.4, 1.3), -2.1, 2.2, 0);
+    part(new THREE.BoxGeometry(0.9, 4.4, 1.3), 2.1, 2.2, 0);
+    part(new THREE.TorusGeometry(2.1, 0.28, 10, 24, Math.PI), 0, 4.4, 0, 0, 0, 0, true);
+    part(new THREE.ConeGeometry(0.85, 2.2, 4), 0, 7.3, 0);
+  } else if (archType === 'hexspire'){
+    part(new THREE.CylinderGeometry(1.7, 2.5, 1.8, 6), 0, 0.9, 0);
+    part(new THREE.CylinderGeometry(0.7, 1.4, 3.4, 6), 0, 3.5, 0);
+    part(new THREE.ConeGeometry(1.3, 2.8, 6), 0, 6.6, 0, 0, 0, 0, true);
+    const fin = part(new THREE.BoxGeometry(0.25, 2.4, 3.2), 0, 4.2, 0);
+    if (registerAnim) animatedGyroParts.push({ obj: fin, speed: -0.02 });
+  } else if (archType === 'domebeacon'){
+    part(new THREE.CylinderGeometry(2.3, 2.5, 1.2, 16), 0, 0.6, 0);
+    part(new THREE.SphereGeometry(2.1, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), 0, 1.2, 0);
+    part(new THREE.TorusGeometry(2.5, 0.16, 8, 28), 0, 2.4, 0, Math.PI * 0.5, 0, 0, true);
+    part(new THREE.CylinderGeometry(0.2, 0.45, 3.4, 8), 0, 4.8, 0);
+  } else if (archType === 'pagoda'){
+    part(new THREE.CylinderGeometry(2.6, 3.0, 0.9, 8), 0, 0.45, 0);
+    part(new THREE.ConeGeometry(2.8, 1.4, 8), 0, 1.6, 0);
+    part(new THREE.ConeGeometry(1.9, 1.3, 8), 0, 2.9, 0, 0, 0, 0, true);
+    part(new THREE.OctahedronGeometry(0.9, 0), 0, 4.4, 0);
+  } else {
+    part(new THREE.BoxGeometry(0.85, 4.6, 0.85), -1.5, 2.3, -1.1);
+    part(new THREE.BoxGeometry(0.85, 4.6, 0.85), 1.5, 2.3, 1.1);
+    part(new THREE.BoxGeometry(4.2, 0.65, 3.0), 0, 3.8, 0, 0, 0, 0, true);
+    part(new THREE.TetrahedronGeometry(1.3, 0), 0, 5.1, 0);
+  }
+
+  parent.add(holder);
+}
+
+function buildUniqueCenterGroup(spec){
+  const group = new THREE.Group();
+  addArchAccentToParent(group, spec.arch, 0, 8.5, spec.color, true);
+  return group;
+}
+
+centerSpecs.forEach((spec) => {
+  const dir = sixDirections[spec.dirIndex].clone().normalize();
+  const baseR = PLANET_RADIUS;
+  const up = dir.clone().multiplyScalar(spec.side);
+  const group = buildUniqueCenterGroup(spec);
+  group.position.copy(dir).multiplyScalar(baseR);
+  group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
+  scene.add(group);
+  centerObjects.push({ spec, dir, baseR, up, group, elevationBoost: 0, growthScale: 1.0 });
+});
+
+function getNearestCenterSpec(pos){
+  const pDir = pos.length() > 0.001 ? pos.clone().normalize() : new THREE.Vector3(1, 0, 0);
+  let best = centerSpecs[0];
+  let bestDot = -Infinity;
+  for (const c of centerSpecs){
+    const d = pDir.dot(sixDirections[c.dirIndex]);
+    if (d > bestDot){
+      bestDot = d;
+      best = c;
     }
+  }
+  return best;
 }
-function updateHud() {
-    routeNameEl.textContent = activeRoute.name;
-    routeCPEl.textContent = `${activeRoute.nextIndex} / ${activeRoute.checkpoints.length}`;
-    if (activeRoute.completed) { routeTimeEl.textContent = `${activeRoute.elapsed.toFixed(1)}s ✓`; routeTimeEl.classList.add('complete'); }
-    else if (activeRoute.started) { routeTimeEl.textContent = `${activeRoute.elapsed.toFixed(1)}s`; routeTimeEl.classList.remove('complete'); }
-    else { routeTimeEl.textContent = '—'; routeTimeEl.classList.remove('complete'); }
-    routeEnergyEl.textContent = energyCount.toString();
-    boostTimeEl.textContent = boostTimer > 0 ? boostTimer.toFixed(1) + 's' : '—';
+
+function updateCentersInfluence(){
+  const totalBuildings = buildings.length;
+  for (const c of centerObjects){
+    const cPos = c.dir.clone().multiplyScalar(c.baseR);
+    let localCount = 0;
+    let score = 0;
+
+    for (const b of buildings){
+      const bPos = new THREE.Vector3(b.x, b.y, b.z);
+      const bSide = b.side ?? (bPos.length() >= PLANET_RADIUS ? 1 : -1);
+      if (bSide !== c.spec.side) continue;
+      localCount++;
+      const dist = bPos.distanceTo(cPos);
+      const proximity = dist <= c.spec.influenceRadius ? (1.25 - dist / c.spec.influenceRadius) : 0.35;
+      const housePower = 1 + (b.storedTokens || 0) * 0.45 + ((b.tier || 1) - 1) * 1.2;
+      score += proximity * housePower;
+    }
+
+    const globalGrowth = 1 + Math.min(1.6, totalBuildings * 0.08 + localCount * 0.14 + score * 0.06);
+    c.growthScale += (globalGrowth - c.growthScale) * 0.12;
+    c.group.scale.setScalar(c.growthScale);
+
+    const targetBoost = Math.min(110, score * 9.5 + localCount * 4.0);
+    c.elevationBoost += (targetBoost - c.elevationBoost) * 0.12;
+    c.group.position.copy(c.dir).multiplyScalar(c.baseR + c.spec.side * c.elevationBoost);
+  }
 }
-setNextCheckpoint();
-updateHud();
 
-const gridHelper = new THREE.GridHelper(1400, 70, 0x1f2a4a, 0x0e1322);
-gridHelper.position.y = 0.01;
-scene.add(gridHelper);
+/* =========================================================
+   MORE RINGS FARTHER FROM SURFACE ON BOTH SIDES
+   ========================================================= */
+const routeRings = [];
+const ringGeo = new THREE.TorusGeometry(18, 1.1, 12, 32);
 
-// =========================================================
-// Клавиатура
-// =========================================================
-const keys = { ArrowLeft: false, ArrowRight: false, ArrowUp: false, ArrowDown: false, Space: false, KeyB: false };
-let lastSpaceTime = 0, superThrust = false, lastBTime = 0, superReverse = false;
+function makeVerticalRingQuaternion(radialDir, rowHeading){
+  const normal = new THREE.Vector3().crossVectors(radialDir, rowHeading);
+  if (normal.lengthSq() < 1e-4){
+    const fallback = Math.abs(radialDir.y) < 0.8 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+    normal.crossVectors(radialDir, fallback);
+  }
+  normal.normalize();
+  return new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+}
+
+const ringBands = [
+  { side: 1, rOffset: 38, latSteps: 7, lonSteps: 12 },
+  { side: -1, rOffset: 38, latSteps: 7, lonSteps: 12 },
+  { side: 1, rOffset: 135, latSteps: 6, lonSteps: 10 },
+  { side: -1, rOffset: 135, latSteps: 6, lonSteps: 10 },
+  { side: 1, rOffset: 260, latSteps: 5, lonSteps: 10 },
+  { side: -1, rOffset: 260, latSteps: 5, lonSteps: 10 },
+  { side: 1, rOffset: 440, latSteps: 4, lonSteps: 8 },
+  { side: -1, rOffset: 440, latSteps: 4, lonSteps: 8 }
+];
+
+let ringIdxCounter = 0;
+ringBands.forEach((band) => {
+  for (let i = 0; i < band.latSteps; i++){
+    const v = (i + 0.5) / band.latSteps;
+    const lat = -1.2 + v * 2.4;
+    for (let j = 0; j < band.lonSteps; j++){
+      const lon = (j / band.lonSteps) * Math.PI * 2 + i * 0.25;
+      const dir = new THREE.Vector3(
+        Math.cos(lat) * Math.cos(lon),
+        Math.sin(lat),
+        Math.cos(lat) * Math.sin(lon)
+      ).normalize();
+      const tangentHeading = new THREE.Vector3(-Math.sin(lon), 0.35 * Math.cos(i + j), Math.cos(lon)).normalize();
+      const r = PLANET_RADIUS + band.side * band.rOffset;
+      const pos = dir.clone().multiplyScalar(r);
+
+      const mat = new THREE.MeshBasicMaterial({
+        color: linePalette[ringIdxCounter % linePalette.length],
+        transparent: true,
+        opacity: RING_ACTIVE_OPACITY
+      });
+      const mesh = new THREE.Mesh(ringGeo, mat);
+      mesh.position.copy(pos);
+      mesh.quaternion.copy(makeVerticalRingQuaternion(dir, tangentHeading));
+      scene.add(mesh);
+
+      routeRings.push({ mesh, mat, cooldownUntil: 0 });
+      ringIdxCounter++;
+    }
+  }
+});
+
+function updateRouteRingsFade(nowMs){
+  for (const ring of routeRings){
+    if (nowMs < ring.cooldownUntil){
+      const remainingRatio = Math.max(0, Math.min(1, (ring.cooldownUntil - nowMs) / RING_COOLDOWN_MS));
+      const recovery = 1 - remainingRatio;
+      ring.mat.opacity = RING_FADED_OPACITY + (RING_ACTIVE_OPACITY - RING_FADED_OPACITY) * (recovery * recovery);
+    } else {
+      ring.mat.opacity = RING_ACTIVE_OPACITY;
+    }
+  }
+}
+
+/* =========================================================
+   HOUSES ON PLAYER SIDE, NO OVERLAPS, ROOF ACCENTS & BRIDGES/ARCHES
+   ========================================================= */
+const buildingsGroup = new THREE.Group();
+scene.add(buildingsGroup);
+const buildingMeshes = new Map();
+
+function getHouseHeight(b){
+  const invested = Math.max(0, (b.storedTokens || 0) + ((b.tier || 1) - 1) * 2);
+  return Math.max(4, 7 + invested * 2.2);
+}
+
+function getHouseSpan(b){
+  return b.isBridge ? 22 : 8;
+}
+
+function getBuildingSide(b){
+  if (b.side === 1 || b.side === -1) return b.side;
+  return player.position.length() < PLANET_RADIUS ? -1 : 1;
+}
+
+function getSurfaceSupportRadius(dir, side, ignoreId = null){
+  const nDir = dir.clone().normalize();
+  let topR = PLANET_RADIUS;
+  for (const b of buildings){
+    if (ignoreId && b.id === ignoreId) continue;
+    const bBase = new THREE.Vector3(b.x, b.y, b.z);
+    if (bBase.lengthSq() < 1e-4) continue;
+    const bSide = getBuildingSide(b);
+    if (bSide !== side) continue;
+    const bDir = bBase.clone().normalize();
+    const arcDist = nDir.angleTo(bDir) * PLANET_RADIUS;
+    const halfFootprint = (getHouseSpan(b) * 0.5) + 0.5;
+    if (arcDist < halfFootprint){
+      const roofR = PLANET_RADIUS + Math.abs(bBase.length() - PLANET_RADIUS) + getHouseHeight(b);
+      if (roofR > topR) topR = roofR;
+    }
+  }
+  return topR;
+}
+
+function upsertBuildingMesh(b){
+  const idx = buildings.findIndex(item => item.id === b.id);
+  if (idx >= 0) buildings[idx] = b;
+  else buildings.push(b);
+
+  if (buildingMeshes.has(b.id)){
+    const old = buildingMeshes.get(b.id);
+    buildingsGroup.remove(old);
+    const ci = collidableObjects.indexOf(old);
+    if (ci >= 0) collidableObjects.splice(ci, 1);
+  }
+
+  const basePos = new THREE.Vector3(b.x, b.y, b.z);
+  const dir = basePos.length() > 0.001 ? basePos.clone().normalize() : new THREE.Vector3(0, 1, 0);
+  const side = getBuildingSide(b);
+  const up = dir.clone().multiplyScalar(side);
+  const h = getHouseHeight(b);
+  const span = getHouseSpan(b);
+  const depth = b.isBridge ? 7 : 8;
+
+  const supportR = getSurfaceSupportRadius(dir, side, b.id);
+  const offsetFromSurface = Math.max(0, supportR - PLANET_RADIUS);
+  const actualR = PLANET_RADIUS + side * offsetFromSurface;
+  const flushBase = dir.clone().multiplyScalar(actualR);
+
+  const boxGeo = new THREE.BoxGeometry(span, h, depth);
+  const houseMesh = new THREE.Mesh(
+    boxGeo,
+    new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 })
+  );
+  houseMesh.position.copy(flushBase).addScaledVector(up, h * 0.5);
+
+  const alignQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
+  if (b.isBridge && b.bridgeAxis){
+    const axisDir = new THREE.Vector3(b.bridgeAxis[0], b.bridgeAxis[1], b.bridgeAxis[2]).normalize();
+    const projAxis = axisDir.clone().sub(up.clone().multiplyScalar(axisDir.dot(up)));
+    if (projAxis.lengthSq() > 1e-4){
+      projAxis.normalize();
+      const localRight = new THREE.Vector3(1, 0, 0).applyQuaternion(alignQuat).normalize();
+      const yawAngle = localRight.angleTo(projAxis);
+      const cross = new THREE.Vector3().crossVectors(localRight, projAxis);
+      const sign = cross.dot(up) >= 0 ? 1 : -1;
+      const yawQuat = new THREE.Quaternion().setFromAxisAngle(up, sign * yawAngle);
+      houseMesh.quaternion.copy(yawQuat).multiply(alignQuat);
+    } else {
+      houseMesh.quaternion.copy(alignQuat);
+    }
+  } else {
+    houseMesh.quaternion.copy(alignQuat);
+  }
+
+  houseMesh.userData.buildingId = b.id;
+
+  const outlineCol = b.color || linePalette[buildings.length % linePalette.length];
+  const edges = new THREE.EdgesGeometry(boxGeo);
+  const lineMesh = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: outlineCol }));
+  houseMesh.add(lineMesh);
+
+  const nearestCenter = getNearestCenterSpec(flushBase);
+  addArchAccentToParent(houseMesh, nearestCenter.arch, h * 0.5, b.isBridge ? 0.9 : 0.78, outlineCol, false);
+
+  buildingsGroup.add(houseMesh);
+  buildingMeshes.set(b.id, houseMesh);
+  collidableObjects.push(houseMesh);
+}
+buildings.forEach(upsertBuildingMesh);
+
+function doesOverlapExistingBuilding(candidatePos, candidateRadius, ignoreId = null){
+  for (const b of buildings){
+    if (ignoreId && b.id === ignoreId) continue;
+    const bPos = new THREE.Vector3(b.x, b.y, b.z);
+    const bSide = getBuildingSide(b);
+    const bDir = bPos.length() > 0.001 ? bPos.clone().normalize() : new THREE.Vector3(0, 1, 0);
+    const bUp = bDir.clone().multiplyScalar(bSide);
+    const bH = getHouseHeight(b);
+    const bCenter = bPos.clone().addScaledVector(bUp, bH * 0.5);
+    const minSep = candidateRadius + Math.max(4.5, bH * 0.45);
+    if (candidatePos.distanceTo(bCenter) < minSep){
+      return true;
+    }
+  }
+  return false;
+}
+
+const aimRaycaster = new THREE.Raycaster();
+function getAimedWorldPoint(){
+  const rect = attackBtn.getBoundingClientRect();
+  const cx = rect.left + rect.width * 0.5;
+  const cy = rect.top + rect.height * 0.5;
+  const ndc = new THREE.Vector2(
+    (cx / window.innerWidth) * 2 - 1,
+    -(cy / window.innerHeight) * 2 + 1
+  );
+  camera.updateMatrixWorld();
+  aimRaycaster.setFromCamera(ndc, camera);
+
+  const camPos = camera.getWorldPosition(new THREE.Vector3());
+  const rayDir = aimRaycaster.ray.direction.clone().normalize();
+  const playerSide = player.position.length() < PLANET_RADIUS ? -1 : 1;
+
+  const oc = camPos.clone();
+  const b = oc.dot(rayDir);
+  const c = oc.lengthSq() - PLANET_RADIUS * PLANET_RADIUS;
+  const disc = b * b - c;
+
+  if (disc >= 0){
+    const sqrtDisc = Math.sqrt(disc);
+    const tNear = -b - sqrtDisc;
+    const tFar = -b + sqrtDisc;
+
+    if (playerSide === 1){
+      if (tNear > 0.1) return camPos.clone().addScaledVector(rayDir, tNear);
+      if (tFar > 0.1) return camPos.clone().addScaledVector(rayDir, tFar);
+    } else {
+      if (tFar > 0.1) return camPos.clone().addScaledVector(rayDir, tFar);
+    }
+  }
+
+  return rayDir.clone().multiplyScalar(PLANET_RADIUS);
+}
+
+function computePlacementOnPlayerSide(aimPoint){
+  const playerSide = player.position.length() < PLANET_RADIUS ? -1 : 1;
+  let dir = aimPoint.length() > 0.001 ? aimPoint.clone().normalize() : new THREE.Vector3(0, 1, 0);
+
+  let anchorBuilding = null;
+  let bestAnchorDist = 26;
+  for (const b of buildings){
+    const bBase = new THREE.Vector3(b.x, b.y, b.z);
+    const bSide = getBuildingSide(b);
+    if (bSide !== playerSide) continue;
+    const bDir = bBase.clone().normalize();
+    const d = dir.angleTo(bDir) * PLANET_RADIUS;
+    if (d > 5.0 && d < bestAnchorDist){
+      bestAnchorDist = d;
+      anchorBuilding = b;
+    }
+  }
+
+  if (anchorBuilding){
+    const aBase = new THREE.Vector3(anchorBuilding.x, anchorBuilding.y, anchorBuilding.z);
+    const aDir = aBase.clone().normalize();
+    const aUp = aDir.clone().multiplyScalar(playerSide);
+    const tangent = dir.clone().sub(aDir.clone().multiplyScalar(dir.dot(aDir)));
+    if (tangent.lengthSq() > 1e-5){
+      tangent.normalize();
+      const rotAxis = new THREE.Vector3().crossVectors(aDir, tangent).normalize();
+      const midDir = aDir.clone().applyAxisAngle(rotAxis, 11 / PLANET_RADIUS).normalize();
+      const midSupportR = getSurfaceSupportRadius(midDir, playerSide);
+      const bridgeOffset = Math.max(0, midSupportR - PLANET_RADIUS);
+      const bridgeBase = midDir.clone().multiplyScalar(PLANET_RADIUS + playerSide * bridgeOffset);
+      const candCenter = bridgeBase.clone().addScaledVector(aUp, 3.5);
+      if (!doesOverlapExistingBuilding(candCenter, 6.5)){
+        return {
+          basePos: bridgeBase,
+          side: playerSide,
+          tier: (anchorBuilding.tier || 1) + 1,
+          isBridge: true,
+          bridgeAxis: [tangent.x, tangent.y, tangent.z]
+        };
+      }
+    }
+  }
+
+  let topSupportR = getSurfaceSupportRadius(dir, playerSide);
+  let stackedTier = 1;
+
+  for (const b of buildings){
+    const bBase = new THREE.Vector3(b.x, b.y, b.z);
+    const bSide = getBuildingSide(b);
+    if (bSide !== playerSide) continue;
+    const bDir = bBase.clone().normalize();
+    const angDist = dir.angleTo(bDir) * PLANET_RADIUS;
+    if (angDist < 4.5){
+      const roofSupportR = PLANET_RADIUS + Math.max(0, getSurfaceSupportRadius(bDir, playerSide) - PLANET_RADIUS) + getHouseHeight(b);
+      if (roofSupportR > topSupportR){
+        topSupportR = roofSupportR;
+        stackedTier = (b.tier || 1) + 1;
+      }
+    }
+  }
+
+  const up = dir.clone().multiplyScalar(playerSide);
+  let basePos = dir.clone().multiplyScalar(PLANET_RADIUS + playerSide * Math.max(0, topSupportR - PLANET_RADIUS));
+  let candCenter = basePos.clone().addScaledVector(up, 4.5);
+  let attempt = 0;
+  while (doesOverlapExistingBuilding(candCenter, 4.8) && attempt < 12){
+    attempt++;
+    const rotAxis = new THREE.Vector3(0, 1, 0).cross(dir);
+    if (rotAxis.lengthSq() < 1e-4) rotAxis.set(1, 0, 0);
+    rotAxis.normalize();
+    dir.applyAxisAngle(rotAxis, 0.008 * attempt).normalize();
+    const rTry = Math.max(0, getSurfaceSupportRadius(dir, playerSide) - PLANET_RADIUS);
+    basePos = dir.clone().multiplyScalar(PLANET_RADIUS + playerSide * rTry);
+    candCenter = basePos.clone().addScaledVector(dir.clone().multiplyScalar(playerSide), 4.5);
+  }
+
+  return {
+    basePos,
+    side: playerSide,
+    tier: stackedTier,
+    isBridge: false,
+    bridgeAxis: null
+  };
+}
+
+const backgroundPlanets = [];
+[
+  { radius: 500, color: 0xe27b58, x: 3500, y: 1500, z: -2000, rotSpeed: 0.002 },
+  { radius: 800, color: 0x47637c, x: -4500, y: -2000, z: -3000, rotSpeed: 0.001 },
+  { radius: 300, color: 0x8d5b9c, x: -4000, y: -4000, z: -4000, rotSpeed: 0.003 }
+].forEach(data => {
+  const m = new THREE.Mesh(
+    new THREE.SphereGeometry(data.radius, 32, 32),
+    new THREE.MeshPhongMaterial({ color: data.color, shininess: 10, flatShading: true })
+  );
+  m.position.set(data.x, data.y, data.z);
+  scene.add(m);
+  backgroundPlanets.push({ mesh: m, rotSpeed: data.rotSpeed });
+});
+
+/* =========================================================
+   MQTT MULTIPLAYER, CHAT & FLYING PLAYER HACKING
+   ========================================================= */
+const BROKER = 'wss://broker.emqx.io:8084/mqtt';
+const TOPIC = 'outside_in_planet/megacity/v1';
+let mqttClient = null;
+const remotePeers = new Map();
+const remotePeerGeo = new THREE.OctahedronGeometry(3.5, 0);
+let activeRemoteAttacks = {};
+
+function getOrCreateRemotePeer(id){
+  if (remotePeers.has(id)) return remotePeers.get(id);
+  const mesh = new THREE.Mesh(
+    remotePeerGeo,
+    new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.45 })
+  );
+  scene.add(mesh);
+  const entry = { mesh, lastSeen: Date.now() };
+  remotePeers.set(id, entry);
+  return entry;
+}
+
+function updatePresenceUI(){
+  const now = Date.now();
+  for (const [id, entry] of remotePeers.entries()){
+    if (now - entry.lastSeen > 12000){
+      scene.remove(entry.mesh);
+      remotePeers.delete(id);
+    }
+  }
+  if (remotePeers.size > 0){
+    presenceBadge.textContent = `Else (${remotePeers.size})`;
+    presenceBadge.className = 'presence-badge else';
+  } else {
+    presenceBadge.textContent = 'Alone';
+    presenceBadge.className = 'presence-badge alone';
+  }
+}
+
+function publishMqtt(payload){
+  if (mqttClient && mqttClient.connected){
+    mqttClient.publish(TOPIC, JSON.stringify({ ...payload, sender: myPeerId, sid: clientId, ts: Date.now() }), { qos: 0 });
+  }
+}
+
+function appendChatLine(sender, text){
+  const div = document.createElement('div');
+  div.className = 'chat-line';
+  const s = document.createElement('span');
+  s.textContent = sender + ': ';
+  div.appendChild(s);
+  div.appendChild(document.createTextNode(text));
+  chatFeed.appendChild(div);
+  while (chatFeed.children.length > 5) chatFeed.removeChild(chatFeed.firstChild);
+  chatFeed.scrollTop = chatFeed.scrollHeight;
+}
+
+try{
+  mqttClient = mqtt.connect(BROKER, { clientId, reconnectPeriod: 4000, connectTimeout: 5000, keepalive: 60 });
+  mqttClient.on('connect', () => {
+    mqttClient.subscribe(TOPIC, { qos: 0 });
+    publishMqtt({ type: 'STATE', pos: [player.position.x, player.position.y, player.position.z] });
+  });
+  mqttClient.on('message', (_, raw) => {
+    let data;
+    try{ data = JSON.parse(raw.toString()); }catch{ return; }
+    if (data.sid === clientId) return;
+
+    if (data.type === 'STATE' && Array.isArray(data.pos) && data.pos.length === 3){
+      const entry = getOrCreateRemotePeer(data.sender || 'Peer');
+      entry.mesh.position.set(data.pos[0], data.pos[1], data.pos[2]);
+      entry.lastSeen = Date.now();
+      updatePresenceUI();
+    } else if (data.type === 'CHAT' && typeof data.text === 'string'){
+      appendChatLine(data.sender || 'Peer', data.text);
+    } else if (data.type === 'TRANSFER' && data.to === myPeerId){
+      recordTokenDelta(data.amount, `Transfer from ${data.sender}`, false);
+    } else if (data.type === 'PEER_HACKED' && data.target === myPeerId){
+      const stolen = Math.min(tokens, Number(data.amount || 1));
+      if (stolen > 0){
+        recordTokenDelta(-stolen, `Hacked by ${data.attacker || data.sender || 'peer'}`, true);
+      }
+    } else if (data.type === 'BUILDING_BUILT'){
+      upsertBuildingMesh(data.building);
+      store.set('buildings', buildings);
+    } else if (data.type === 'BUILDING_LOOTED'){
+      const b = buildings.find(item => item.id === data.buildingId);
+      if (b){
+        b.storedTokens = Math.max(0, (b.storedTokens || 0) - data.amount);
+        upsertBuildingMesh(b);
+        store.set('buildings', buildings);
+      }
+    } else if (data.type === 'AUTHOR_SHARE' && data.to === myPeerId){
+      const shareAmt = Number(data.amount || 0);
+      if (shareAmt > 0){
+        const srcLabel = data.source === 'house_build' ? 'House fee' : 'Transfer fee';
+        recordTokenDelta(shareAmt, `${srcLabel} from ${data.from || data.sender || 'peer'}`, false);
+      }
+    } else if (data.type === 'FREEZE_PLAYER' && data.target === myPeerId){
+      applyFreezeToSelf(data.durationMs || 6000);
+    } else if (data.type === 'FREEZE_STATE'){
+      if (data.active){
+        activeRemoteAttacks[data.target] = { attacker: data.attacker, until: Date.now() + (data.durationMs || 6000) };
+      } else {
+        delete activeRemoteAttacks[data.target];
+      }
+    }
+  });
+}catch{}
+
+setInterval(() => {
+  publishMqtt({
+    type: 'STATE',
+    pos: [Number(player.position.x.toFixed(2)), Number(player.position.y.toFixed(2)), Number(player.position.z.toFixed(2))]
+  });
+  updatePresenceUI();
+}, 1500);
+
+function sendChat(){
+  const txt = chatInput.value.trim();
+  if (!txt) return;
+  appendChatLine(myPeerId, txt);
+  publishMqtt({ type: 'CHAT', text: txt });
+  chatInput.value = '';
+}
+chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter'){ e.preventDefault(); sendChat(); } });
+
+peerIdInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') peerIdInput.blur(); });
+peerIdInput.addEventListener('blur', () => {
+  const v = peerIdInput.value.trim();
+  if (/^[A-Za-z0-9_\-]{3,12}$/.test(v)){
+    myPeerId = v;
+    store.set('peer_id', myPeerId);
+    peerIdInput.classList.add('saved');
+    setTimeout(() => peerIdInput.classList.remove('saved'), 700);
+  } else {
+    peerIdInput.value = myPeerId;
+  }
+});
+
+/* =========================================================
+   RETICLE: TAP ONLY TOGGLES MENU; EXPLICIT CLICK SELECTS MODE;
+   LONG-PRESS ACTIVATES SELECTED MODE
+   ========================================================= */
+let selectedReticleMode = 'build';
+let menuOpenedAt = 0;
+
+function syncMenuSelectionUI(){
+  reticleMenu.querySelectorAll('.rm-item').forEach(b => {
+    b.classList.toggle('selected', b.dataset.mode === selectedReticleMode);
+  });
+}
+
+function openReticleMenu(){
+  syncMenuSelectionUI();
+  const r = attackBtn.getBoundingClientRect();
+  const left = Math.max(8, Math.min(window.innerWidth - 194, r.left - 62));
+  const top = Math.max(40, r.top - 160);
+  reticleMenu.style.left = left + 'px';
+  reticleMenu.style.top = top + 'px';
+  menuOpenedAt = performance.now();
+  reticleMenu.classList.add('open');
+}
+function closeReticleMenu(){
+  reticleMenu.classList.remove('open');
+}
+
+reticleMenu.querySelectorAll('.rm-item').forEach(btn => {
+  btn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+  });
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!reticleMenu.classList.contains('open')) return;
+    if (performance.now() - menuOpenedAt < 260) return;
+    selectedReticleMode = btn.dataset.mode;
+    syncMenuSelectionUI();
+    closeReticleMenu();
+  });
+});
+
+document.addEventListener('pointerdown', (e) => {
+  if (!reticleMenu.classList.contains('open')) return;
+  if (performance.now() - menuOpenedAt < 180) return;
+  if (!reticleMenu.contains(e.target) && !attackBtn.contains(e.target)){
+    closeReticleMenu();
+  }
+});
+
+const keys = {};
+let lastSpaceTime = 0;
+let superThrust = false;
+
 window.addEventListener('keydown', (e) => {
-    if (e.target === chatInput || e.target === peerIdInput || e.target === sendToInput || e.target === sendAmountInput) return;
-    if (e.key.startsWith('Arrow')) { keys[e.code] = true; e.preventDefault(); }
-    if (e.code === 'Space') { e.preventDefault(); const t = performance.now(); if (t - lastSpaceTime < 300) superThrust = true; lastSpaceTime = t; keys['Space'] = true; }
-    if (e.code === 'KeyB') { e.preventDefault(); const t = performance.now(); if (t - lastBTime < 300) superReverse = true; lastBTime = t; keys['KeyB'] = true; }
+  if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+  if (e.code === 'Space' && !keys['Space']){
+    const now = performance.now();
+    if (now - lastSpaceTime < 250) superThrust = true;
+    lastSpaceTime = now;
+  }
+  if (e.code === 'KeyF' && !keys['KeyF']) startSelectedAction();
+  keys[e.code] = true;
 });
 window.addEventListener('keyup', (e) => {
-    if (e.target === chatInput || e.target === peerIdInput || e.target === sendToInput || e.target === sendAmountInput) return;
-    if (e.key.startsWith('Arrow')) { keys[e.code] = false; e.preventDefault(); }
-    if (e.code === 'Space') { e.preventDefault(); keys['Space'] = false; superThrust = false; }
-    if (e.code === 'KeyB') { e.preventDefault(); keys['KeyB'] = false; superReverse = false; }
+  keys[e.code] = false;
+  if (e.code === 'Space') superThrust = false;
+  if (e.code === 'KeyF') stopHoldAction();
 });
 
-// =========================================================
-// BUILD MODE
-// =========================================================
-const buildState = { active: false, w: 20, d: 20, h: 40, ghost: null };
-const buildHudEl = document.getElementById('buildHud');
-const buildSizeEl = document.getElementById('buildSize');
-const buildPriceEl = document.getElementById('buildPrice');
-
-function computeBuildPrice(w, d, h) { return Math.max(5, Math.round(10 * (w * d) / 100 + 0.5 * h)); }
-const ghostMaterial = new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.35, wireframe: true });
-
-function enterBuildMode() {
-    if (Date.now() < violationState.buildLockUntil) {
-        toast('Build locked for ' + Math.ceil((violationState.buildLockUntil - Date.now()) / 1000) + 's', 'error'); return;
-    }
-    exitRouteBuildMode();
-    buildState.active = true;
-    buildHudEl.classList.add('active');
-    updateBuildGhost();
-}
-function exitBuildMode() {
-    buildState.active = false;
-    buildHudEl.classList.remove('active');
-    if (buildState.ghost) { scene.remove(buildState.ghost); buildState.ghost = null; }
-}
-function updateBuildGhost() {
-    if (!buildState.active) return;
-    if (buildState.ghost) scene.remove(buildState.ghost);
-    const geo = new THREE.BoxGeometry(buildState.w, buildState.h, buildState.d);
-    buildState.ghost = new THREE.Mesh(geo, ghostMaterial);
-    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
-    const ghostPos = player.position.clone().add(fwd.multiplyScalar(30));
-    buildState.ghost.position.copy(ghostPos);
-    scene.add(buildState.ghost);
-    const price = computeBuildPrice(buildState.w, buildState.d, buildState.h);
-    buildSizeEl.textContent = `${buildState.w} × ${buildState.d} × ${buildState.h}`;
-    buildPriceEl.textContent = price + ' JP';
-    buildPriceEl.classList.toggle('insufficient', Stats.data.balance < price);
-}
-function placeBuild() {
-    if (!buildState.active) return;
-    if (Date.now() < violationState.buildLockUntil) { toast('Build locked', 'error'); return; }
-    const price = computeBuildPrice(buildState.w, buildState.d, buildState.h);
-    if (!Stats.canAfford(price)) { toast(`Need ${price} JP, have ${Stats.data.balance}`, 'error'); return; }
-    const pos = buildState.ghost.position.clone();
-    const testBounds = new THREE.Box3(
-        new THREE.Vector3(pos.x - buildState.w/2, 0, pos.z - buildState.d/2),
-        new THREE.Vector3(pos.x + buildState.w/2, buildState.h, pos.z + buildState.d/2)
-    );
-    for (const b of buildingBounds) if (b.intersectsBox(testBounds)) { toast('Overlaps with another building', 'error'); return; }
-    if (isInAnyCorridor(pos.x, pos.z)) { toast('Cannot build in route corridor', 'error'); return; }
-    const distFromCenter = Math.sqrt(pos.x ** 2 + pos.z ** 2);
-    if (distFromCenter > CITY_SOFT_EDGE + 50) { toast('Too far from city', 'error'); return; }
-    Stats.add(-price, `build ${buildState.w}×${buildState.d}×${buildState.h}`);
-    Stats.data.builds++; Stats.save();
-    addBuilding(pos.x, pos.z, buildState.w, buildState.d, buildState.h, facadeMats[0], true);
-    rebuildColliderBounds();
-    if (client && client.connected) {
-        client.publish(TOPIC_BUILD, JSON.stringify({
-            type: 'BUILD', author: myId, sid: clientId,
-            x: pos.x, z: pos.z, w: buildState.w, d: buildState.d, h: buildState.h
-        }), { qos: 1 });
-    }
-    toast(`Built ${buildState.w}×${buildState.d}×${buildState.h} for ${price} JP`, 'success');
-    exitBuildMode();
-}
-function handleRemoteBuild(p) {
-    addBuilding(p.x, p.z, p.w, p.d, p.h, facadeMats[0], true);
-    rebuildColliderBounds();
-    toast(`New house built by ${p.author}`, 'info');
-    if (window.WorldStore) WorldStore.putHouse({ houseId: 'h-' + p.x.toFixed(1) + '_' + p.z.toFixed(1), x: p.x, z: p.z, w: p.w, d: p.d, h: p.h, author: p.author }).catch(() => {});
-}
-
-document.getElementById('buildBtn').addEventListener('click', () => { if (buildState.active) exitBuildMode(); else enterBuildMode(); });
-document.getElementById('buildPlaceBtn').addEventListener('click', placeBuild);
-document.getElementById('buildCancelBtn').addEventListener('click', exitBuildMode);
-window.addEventListener('wheel', (e) => {
-    if (!buildState.active) return;
-    e.preventDefault();
-    const d = Math.sign(e.deltaY);
-    if (e.shiftKey) buildState.h = Math.max(5, buildState.h + d * 5);
-    else if (e.ctrlKey) buildState.d = Math.max(5, buildState.d + d * 5);
-    else buildState.w = Math.max(5, buildState.w + d * 5);
-    updateBuildGhost();
-}, { passive: false });
-
-// =========================================================
-// ROUTE BUILD MODE
-// =========================================================
-const routeBuildState = { active: false, points: [], ghostRing: null };
-const routeBuildHudEl = document.getElementById('routeBuildHud');
-const routeRingCountEl = document.getElementById('routeRingCount');
-const routePriceEl = document.getElementById('routePrice');
-const routeFinishBtn = document.getElementById('routeFinishBtn');
-const routeBtn = document.getElementById('routeBtn');
-
-const ROUTE_BASE_PRICE = 20;
-const ROUTE_EXTRA_PER_RING = 2;
-const ROUTE_FREE_RINGS = 8;
-const ROUTE_MIN_RINGS = 3;
-const ROUTE_MAX_RINGS = 24;
-const ROUTE_COLOR = 0xffd166;
-const USER_ROUTE_MAX = 3;
-
-let myRoutesCreated = 0;
-
-function computeRoutePrice(n) {
-    if (n <= ROUTE_FREE_RINGS) return ROUTE_BASE_PRICE;
-    return ROUTE_BASE_PRICE + (n - ROUTE_FREE_RINGS) * ROUTE_EXTRA_PER_RING;
-}
-
-function enterRouteBuildMode() {
-    if (buildState.active) exitBuildMode();
-    if (myRoutesCreated >= USER_ROUTE_MAX) {
-        toast(`Route limit reached (${USER_ROUTE_MAX} per session)`, 'warn');
-        return;
-    }
-    routeBuildState.active = true;
-    routeBuildState.points = [];
-    routeBuildHudEl.classList.add('active');
-    routeBtn.classList.add('active');
-    updateRouteBuildHud();
-}
-function exitRouteBuildMode() {
-    routeBuildState.active = false;
-    routeBuildHudEl.classList.remove('active');
-    routeBtn.classList.remove('active');
-    if (routeBuildState.ghostRing) { scene.remove(routeBuildState.ghostRing); routeBuildState.ghostRing = null; }
-    for (const m of routeBuildState.points) if (m.ghost) scene.remove(m.ghost);
-    routeBuildState.points = [];
-}
-function updateRouteBuildHud() {
-    const n = routeBuildState.points.length;
-    const price = computeRoutePrice(Math.max(n, ROUTE_MIN_RINGS));
-    routeRingCountEl.textContent = n;
-    routePriceEl.textContent = `${price} JP` + (n < ROUTE_MIN_RINGS ? ` (min ${ROUTE_MIN_RINGS})` : '');
-    routePriceEl.classList.toggle('insufficient', Stats.data.balance < price);
-    routeFinishBtn.disabled = n < ROUTE_MIN_RINGS || Stats.data.balance < price;
-}
-function getGhostPosition() {
-    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
-    return player.position.clone().add(fwd.multiplyScalar(40));
-}
-function addRoutePoint() {
-    if (!routeBuildState.active) return;
-    if (routeBuildState.points.length >= ROUTE_MAX_RINGS) { toast('Max rings reached', 'warn'); return; }
-    const pos = getGhostPosition();
-    if (isInAnyCorridor(pos.x, pos.z)) { toast('Cannot place ring in route corridor', 'error'); return; }
-    for (const b of buildingBounds) if (b.containsPoint(pos)) { toast('Cannot place ring inside a building', 'error'); return; }
-    if (routeBuildState.points.length > 0) {
-        const last = routeBuildState.points[routeBuildState.points.length - 1].pos;
-        if (last.distanceTo(pos) < 15) { toast('Too close to previous ring', 'warn'); return; }
-    }
-    if (Math.sqrt(pos.x ** 2 + pos.z ** 2) > CITY_SOFT_EDGE) { toast('Too far from city', 'error'); return; }
-    const marker = makeCheckpoint(pos, 6, ROUTE_COLOR);
-    marker.ghost = true;
-    routeBuildState.points.push({ pos, mesh: marker.mesh, ghost: marker.mesh });
-    updateRouteBuildHud();
-    toast(`Ring ${routeBuildState.points.length} placed`, 'info', 1200);
-}
-function finishRouteBuild() {
-    if (!routeBuildState.active) return;
-    const n = routeBuildState.points.length;
-    if (n < ROUTE_MIN_RINGS) { toast(`Need at least ${ROUTE_MIN_RINGS} rings`, 'error'); return; }
-    const price = computeRoutePrice(n);
-    if (!Stats.canAfford(price)) { toast(`Need ${price} JP, have ${Stats.data.balance}`, 'error'); return; }
-
-    Stats.add(-price, `build route (${n} rings)`);
-    myRoutesCreated++;
-
-    const routeId = 'rt-' + Date.now() + '-' + Math.random().toString(16).slice(2, 8);
-    const routeName = `${myId} #${myRoutesCreated}`;
-    const points = routeBuildState.points.map(p => ({ x: p.pos.x, y: p.pos.y, z: p.pos.z }));
-
-    buildPolyRoute(routeName, points, ROUTE_COLOR, myId, routeId);
-
-    if (client && client.connected) {
-        client.publish(TOPIC_ROUTE, JSON.stringify({
-            type: 'ROUTE_CREATE', author: myId, sid: clientId,
-            routeId, name: routeName, points, color: ROUTE_COLOR, ts: Date.now()
-        }), { qos: 1, retain: true });
-    }
-    toast(`✓ Route "${routeName}" created (−${price} JP)`, 'success');
-    exitRouteBuildMode();
-    const newRoute = routes[routes.length - 1];
-    activeRoute = newRoute;
-    setNextCheckpoint();
-    updateHud();
-}
-
-function handleRemoteRoute(p) {
-    if (routes.find(r => r.routeId === p.routeId)) return;
-    buildPolyRoute(p.name, p.points, p.color, p.author, p.routeId);
-    toast(`New route "${p.name}" by ${p.author}`, 'info');
-    if (window.WorldStore) WorldStore.putRoute({ routeId: p.routeId, name: p.name, points: p.points, color: p.color, author: p.author }).catch(() => {});
-}
-
-document.getElementById('routeBtn').addEventListener('click', () => {
-    if (routeBuildState.active) exitRouteBuildMode();
-    else enterRouteBuildMode();
+let mouseDragging = false, lastMouseX = 0, lastMouseY = 0;
+renderer.domElement.addEventListener('mousedown', (e) => {
+  if (e.button === 0){ mouseDragging = true; lastMouseX = e.clientX; lastMouseY = e.clientY; }
 });
-document.getElementById('routeFinishBtn').addEventListener('click', finishRouteBuild);
-document.getElementById('routeCancelBtn').addEventListener('click', exitRouteBuildMode);
-
-renderer.domElement.addEventListener('click', (e) => {
-    if (!routeBuildState.active) return;
-    if (e.target.closest('#topBar') || e.target.closest('.overlay') || e.target.closest('#chatPanel')) return;
-    addRoutePoint();
+window.addEventListener('mousemove', (e) => {
+  if (!mouseDragging) return;
+  touchJoystick.active = true;
+  touchJoystick.moveX = Math.max(-1, Math.min(1, (e.clientX - lastMouseX) / 35));
+  touchJoystick.moveY = Math.max(-1, Math.min(1, (e.clientY - lastMouseY) / 35));
+  lastMouseX = e.clientX; lastMouseY = e.clientY;
+});
+window.addEventListener('mouseup', () => {
+  if (mouseDragging){ mouseDragging = false; touchJoystick.active = false; touchJoystick.moveX = 0; touchJoystick.moveY = 0; }
 });
 
-// =========================================================
-// ФИЗИКА
-// =========================================================
-let velocity = new THREE.Vector3(0, 0, 0);
-let angularVelocityX = 0, angularVelocityZ = 0;
-const colliderBounds = [];
-function rebuildColliderBounds() {
-    colliderBounds.length = 0;
-    for (let i = 0; i < collidableObjects.length; i++) {
-        colliderBounds.push(new THREE.Box3().setFromObject(collidableObjects[i]));
-    }
-}
-rebuildColliderBounds();
+let isHoldingAttack = false;
+let holdStartTime = 0;
+let holdMode = null;
+let targetBuildingId = null;
+let targetPeerId = null;
+let lastDepositStep = 0;
+let lastDrainStep = 0;
+let frozenUntil = 0;
+let freezeCooldownUntil = 0;
+let longPressTimer = null;
+let longPressTriggered = false;
+let btnDrag = { active: false, moved: false, downAt: 0, ox: 0, oy: 0, sx: 0, sy: 0 };
 
-// ===== WorldStore: снимок и восстановление мира =====
-async function snapshotWorld() {
-    if (!window.WorldStore) return;
-    try {
-        for (const b of buildingBounds) {
-            const cx = (b.min.x + b.max.x) / 2;
-            const cz = (b.min.z + b.max.z) / 2;
-            const w = b.max.x - b.min.x;
-            const d = b.max.z - b.min.z;
-            const h = b.max.y;
-            await WorldStore.putHouse({ houseId: 'h-' + cx.toFixed(1) + '_' + cz.toFixed(1), x: cx, z: cz, w, d, h }).catch(() => {});
-        }
-        for (const r of routes) {
-            if (!r.routeId) continue;
-            await WorldStore.putRoute({
-                routeId: r.routeId, name: r.name, color: r.color, author: r.author,
-                points: r.checkpoints.map(c => ({ x: c.pos.x, y: c.pos.y, z: c.pos.z }))
-            }).catch(() => {});
-        }
-    } catch (e) {}
+function clearLongPressTimer(){
+  if (longPressTimer !== null){
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
 }
 
-async function restoreWorld() {
-    if (!window.WorldStore) return;
-    try {
-        const houses = await WorldStore.getAllHouses();
-        let added = 0;
-        for (const h of houses) {
-            const exists = buildingBounds.some(b => {
-                const cx = (b.min.x + b.max.x) / 2, cz = (b.min.z + b.max.z) / 2;
-                return Math.abs(cx - h.x) < 1.0 && Math.abs(cz - h.z) < 1.0;
-            });
-            if (exists) continue;
-            addBuilding(h.x, h.z, h.w, h.d, h.h, facadeMats[0], true);
-            added++;
-        }
-        if (added) rebuildColliderBounds();
-        const cachedRoutes = await WorldStore.getAllRoutes();
-        let rAdded = 0;
-        for (const r of cachedRoutes) {
-            if (routes.find(x => x.routeId === r.routeId)) continue;
-            buildPolyRoute(r.name, r.points, r.color, r.author, r.routeId);
-            rAdded++;
-        }
-        console.log('[WorldStore] restored', added, 'houses,', rAdded, 'routes');
-    } catch (e) { console.warn('[WorldStore] restore failed', e); }
+function applyFreezeToSelf(durationMs){
+  frozenUntil = Math.max(frozenUntil, Date.now() + durationMs);
 }
 
-const SOFT_LIMIT = CITY_SOFT_EDGE + 120;
-const ENERGY_BOOST_DURATION = 3.0;
-const violationCooldown = {};
-const PLAYER_RADIUS = 1.5;
-
-function checkViolation(beforePos, afterPos) {
-    for (let i = 0; i < buildingBounds.length; i++) {
-        const b = buildingBounds[i];
-        const insideBefore = b.containsPoint(beforePos);
-        const insideAfter = b.containsPoint(afterPos);
-        if (insideAfter && !insideBefore) {
-            if (violationCooldown[i] && Date.now() - violationCooldown[i] < 5000) continue;
-            violationCooldown[i] = Date.now();
-            registerViolation();
-            return;
-        }
-    }
+function findNearestBuilding(fromPos, maxDist = 35){
+  let best = null, bestD = maxDist;
+  for (const b of buildings){
+    const d = fromPos.distanceTo(new THREE.Vector3(b.x, b.y, b.z));
+    if (d < bestD){ bestD = d; best = b; }
+  }
+  return best;
 }
 
-function findRoofLanding(pos, radius) {
-    for (const r of roofColliders) {
-        if (pos.x >= r.box.min.x - radius && pos.x <= r.box.max.x + radius &&
-            pos.z >= r.box.min.z - radius && pos.z <= r.box.max.z + radius) {
-            if (pos.y >= r.topY - 0.5 && pos.y <= r.topY + radius + 2) {
-                return r;
-            }
-        }
+function findNearestPeer(maxDist = 65){
+  let bestId = null, bestD = maxDist;
+  for (const [pid, entry] of remotePeers.entries()){
+    const d = player.position.distanceTo(entry.mesh.position);
+    if (d < bestD){
+      bestD = d;
+      bestId = pid;
     }
-    return null;
+  }
+  return bestId;
 }
 
-renderer.setAnimationLoop(() => {
-    const session = renderer.xr.getSession();
-    const frozen = isFrozen();
+function startSelectedAction(){
+  closeReticleMenu();
+  if (Date.now() < frozenUntil) return;
+  const incomingFreeze = activeRemoteAttacks[myPeerId];
+  if (incomingFreeze && incomingFreeze.until > Date.now() && incomingFreeze.attacker !== myPeerId) return;
+  if (isHoldingAttack) return;
 
-    let tX = 0, tY = 0, vrThrust = 0;
-    if (!frozen) {
-        if (keys['ArrowLeft']) tY = -1;
-        if (keys['ArrowRight']) tY = 1;
-        if (keys['ArrowUp']) tX = -1;
-        if (keys['ArrowDown']) tX = 1;
-        if (keys['Space']) vrThrust = FLY_SPEED * (superThrust ? 2.5 : 1.0);
-        if (keys['KeyB']) vrThrust = -FLY_SPEED * (superReverse ? 2.5 : 1.0);
-        if (touchJoystick.active) {
-            angularVelocityX += touchJoystick.moveY * TOUCH_TURN_SPEED;
-            angularVelocityZ -= touchJoystick.moveX * TOUCH_TURN_SPEED;
-        }
-        if (session && session.inputSources) {
-            for (const s of session.inputSources) {
-                const gp = s.gamepad; if (!gp) continue;
-                if (Math.abs(gp.axes[1]) > 0.2) tX = gp.axes[1];
-                if (Math.abs(gp.axes[0]) > 0.2) tY = gp.axes[0];
-                if (gp.buttons[0]?.pressed) vrThrust = FLY_SPEED * 2;
-            }
-        }
-    } else {
-        velocity.set(0, 0, 0);
-        angularVelocityX = 0; angularVelocityZ = 0;
+  const aimPt = getAimedWorldPoint();
+
+  if (selectedReticleMode === 'hack'){
+    const nearPeer = findNearestPeer(65);
+    const nearB = findNearestBuilding(aimPt, 35) || findNearestBuilding(player.position, 35);
+    if (nearPeer){
+      holdMode = 'hack_peer';
+      targetPeerId = nearPeer;
+      targetBuildingId = null;
+      lastDrainStep = 0;
+      isHoldingAttack = true;
+      holdStartTime = performance.now();
+      attackBtn.classList.add('active');
+      publishMqtt({ type: 'PEER_HACK_ALERT', target: nearPeer, attacker: myPeerId });
+      return;
     }
+    if (!nearB || nearB.owner === myPeerId || (nearB.storedTokens || 0) <= 0) return;
+    holdMode = 'hack';
+    targetBuildingId = nearB.id;
+    targetPeerId = null;
+    lastDrainStep = 0;
+    isHoldingAttack = true;
+    holdStartTime = performance.now();
+    attackBtn.classList.add('active');
+    publishMqtt({ type: 'BUILDING_ALERT', buildingId: nearB.id, owner: nearB.owner, attacker: myPeerId });
+  } else if (selectedReticleMode === 'attack'){
+    const nearP = findNearestPeer(55);
+    if (!nearP || Date.now() < freezeCooldownUntil) return;
+    holdMode = 'attack';
+    targetPeerId = nearP;
+    isHoldingAttack = true;
+    holdStartTime = performance.now();
+    attackBtn.classList.add('active');
+    const durMs = 6000;
+    publishMqtt({ type: 'FREEZE_PLAYER', target: nearP, attacker: myPeerId, durationMs: durMs });
+    publishMqtt({ type: 'FREEZE_STATE', target: nearP, attacker: myPeerId, active: true, durationMs: durMs });
+    freezeCooldownUntil = Date.now() + 7500;
+  } else {
+    if (tokens < 1) return;
+    holdMode = 'build';
+    targetBuildingId = null;
+    lastDepositStep = 0;
+    isHoldingAttack = true;
+    holdStartTime = performance.now();
+    attackBtn.classList.add('active');
 
-    let tZ = -tY * 2.0;
-    if (Math.abs(tX) > 0.01) angularVelocityX += tX * TURN_SPEED;
-    if (Math.abs(tY) > 0.01) angularVelocityZ -= tY * TURN_SPEED;
-    if (Math.abs(tZ) > 0.01) angularVelocityZ += tZ * TURN_SPEED * 0.5;
-    angularVelocityX *= DAMPING_TURN; angularVelocityZ *= DAMPING_TURN;
-    const dq = new THREE.Quaternion().setFromEuler(new THREE.Euler(angularVelocityX, 0, angularVelocityZ, 'YXZ'));
-    player.quaternion.multiply(dq);
+    recordTokenDelta(-1, 'Build house', true);
 
-    let boostMult = 1.0;
-    if (boostTimer > 0) { boostMult = 1.8; boostTimer = Math.max(0, boostTimer - 1 / 60); }
+    const placed = computePlacementOnPlayerSide(aimPt);
+    const newB = {
+      id: 'b_' + Date.now() + '_' + Math.random().toString(16).slice(2, 6),
+      owner: myPeerId,
+      x: Number(placed.basePos.x.toFixed(1)),
+      y: Number(placed.basePos.y.toFixed(1)),
+      z: Number(placed.basePos.z.toFixed(1)),
+      side: placed.side,
+      storedTokens: 0,
+      tier: placed.tier,
+      isBridge: placed.isBridge,
+      bridgeAxis: placed.bridgeAxis,
+      color: linePalette[buildings.length % linePalette.length]
+    };
+    targetBuildingId = newB.id;
+    upsertBuildingMesh(newB);
+    store.set('buildings', buildings);
+    publishMqtt({ type: 'BUILDING_BUILT', building: newB });
+    routeAuthorFee(1, 'house_build', newB.id);
+  }
+}
 
-    let thrustForce = 0;
-    if (!frozen) {
-        if (Math.abs(vrThrust) > 0) thrustForce = vrThrust * boostMult;
-        else if (Math.abs(currentThrottle) > 0.05) thrustForce = FLY_SPEED * (currentThrottle * 2.0) * boostMult;
+function stopHoldAction(){
+  clearLongPressTimer();
+  longPressTriggered = false;
+  if (!isHoldingAttack) return;
+  isHoldingAttack = false;
+  attackBtn.classList.remove('active');
+  if (holdMode === 'attack' && targetPeerId){
+    publishMqtt({ type: 'FREEZE_STATE', target: targetPeerId, attacker: myPeerId, active: false });
+  }
+  holdMode = null;
+  targetBuildingId = null;
+  targetPeerId = null;
+}
+
+attackBtn.addEventListener('pointerdown', (e) => {
+  e.stopPropagation();
+  e.preventDefault();
+  attackBtn.setPointerCapture(e.pointerId);
+  const r = attackBtn.getBoundingClientRect();
+  longPressTriggered = false;
+  btnDrag = {
+    active: true,
+    moved: false,
+    downAt: performance.now(),
+    ox: e.clientX - r.left,
+    oy: e.clientY - r.top,
+    sx: e.clientX,
+    sy: e.clientY
+  };
+  clearLongPressTimer();
+  longPressTimer = setTimeout(() => {
+    if (btnDrag.active && !btnDrag.moved){
+      longPressTriggered = true;
+      startSelectedAction();
     }
-    const localUp = new THREE.Vector3(0, 1, 0).applyQuaternion(player.quaternion);
-    if (Math.abs(thrustForce) > 0) velocity.add(localUp.clone().multiplyScalar(thrustForce));
-    if (!frozen) velocity.y -= GRAVITY;
-
-    const pr = PLAYER_RADIUS;
-    const nextPos = player.position.clone().add(velocity);
-    const nextBox = new THREE.Box3(
-        new THREE.Vector3(nextPos.x - pr, nextPos.y - pr, nextPos.z - pr),
-        new THREE.Vector3(nextPos.x + pr, nextPos.y + pr, nextPos.z + pr)
-    );
-    for (let i = 0; i < colliderBounds.length; i++) {
-        const bbox = colliderBounds[i];
-        if (!bbox.intersectsBox(nextBox)) continue;
-        const cp = new THREE.Vector3();
-        bbox.clampPoint(nextPos, cp);
-        const distance = nextPos.distanceTo(cp);
-        if (distance < pr) {
-            const pushDir = new THREE.Vector3().subVectors(nextPos, cp).normalize();
-            if (pushDir.lengthSq() === 0) pushDir.set(0, 1, 0);
-            player.position.copy(cp).add(pushDir.multiplyScalar(pr));
-            velocity.reflect(pushDir).multiplyScalar(0.2);
-            break;
-        }
-    }
-
-    const beforePos = player.position.clone();
-    if (!frozen) {
-        player.position.add(velocity);
-        velocity.multiplyScalar(DAMPING_MOVE);
-        checkViolation(beforePos, player.position);
-    }
-
-    const roof = findRoofLanding(player.position, pr);
-    if (roof) {
-        const onTop = player.position.y - pr <= roof.topY + 0.4;
-        if (onTop) {
-            player.position.y = roof.topY + pr;
-            if (velocity.y < 0) velocity.y = 0;
-        }
-    }
-
-    if (player.position.y < 2) { player.position.y = 2; velocity.y = Math.max(0, velocity.y * -0.3); }
-
-    if (!activeRoute.completed) {
-        if (!activeRoute.started && player.position.distanceTo(activeRoute.checkpoints[0].pos) < 20) {
-            activeRoute.started = true; activeRoute.startTime = performance.now();
-        }
-        if (activeRoute.started) activeRoute.elapsed = (performance.now() - activeRoute.startTime) / 1000;
-
-const cp = activeRoute.checkpoints[activeRoute.nextIndex];
-        if (cp && player.position.distanceTo(cp.pos) < cp.radius) {
-            activeRoute.nextIndex++;
-            setNextCheckpoint();
-
-            const reward = activeRoute.jpPerPickup || 1;
-            Stats.add(reward, `ring ${activeRoute.nextIndex}/${activeRoute.checkpoints.length}`);
-            toast(`+${reward} JP`, 'success', 1200);
-            activeRoute.earnedThisRun = (activeRoute.earnedThisRun || 0) + reward;
-
-            if (activeRoute.nextIndex >= activeRoute.checkpoints.length) {
-                const bonus = activeRoute.earnedThisRun;
-                Stats.add(bonus, `route complete bonus (x2)`);
-                toast(`✓ Route complete! +${bonus} JP bonus`, 'success', 3000);
-                Stats.data.routes++; Stats.save();
-                activeRoute.completed = true;
-                setTimeout(() => {
-                    activeRoute.nextIndex = 0;
-                    activeRoute.completed = false;
-                    activeRoute.started = false;
-                    activeRoute.elapsed = 0;
-                    activeRoute.earnedThisRun = 0;
-                    setNextCheckpoint();
-                }, 3000);
-            }
-        }
-for (const orb of activeRoute.energyOrbs) {
-            if (orb.collected) continue;
-            if (player.position.distanceTo(orb.pos) < 12) {
-                orb.collected = true; orb.mesh.visible = false;
-                energyCount++;
-                Stats.data.orbs++;
-                const reward = activeRoute.jpPerPickup || 1;
-                Stats.add(reward, 'orb');
-                activeRoute.earnedThisRun = (activeRoute.earnedThisRun || 0) + reward;
-                boostTimer = ENERGY_BOOST_DURATION;
-            }
-        }
-
-        // ===== +1 JP за пролёт сквозь арку в парке (кулдаун 10с) =====
-        const nowMs = performance.now();
-        for (const arch of parkArches) {
-            if (nowMs < arch.cooldownUntil) continue;
-            if (player.position.distanceTo(arch.pos) < arch.radius) {
-                arch.cooldownUntil = nowMs + 10000;
-                Stats.add(1, 'park arch');
-                toast('+1 JP — park arch!', 'success', 1400);
-                break;
-            }
-        }
-    }
-
-    const dist = Math.sqrt(player.position.x ** 2 + player.position.z ** 2);
-    if (dist > SOFT_LIMIT) {
-        const nx = player.position.x / dist, nz = player.position.z / dist;
-        const over = dist - SOFT_LIMIT;
-        velocity.x -= nx * over * 0.002; velocity.z -= nz * over * 0.002;
-    }
-
-    if (buildState.active) updateBuildGhost();
-
-    updateHud();
-    const t = performance.now() / 1000;
-    for (const r of routes) {
-        for (let i = 0; i < r.checkpoints.length; i++) {
-            const cp = r.checkpoints[i];
-            if (r === activeRoute && i === r.nextIndex && !r.completed) {
-                cp.mesh.rotation.z = t * 0.5;
-                const s = 1 + Math.sin(t * 3) * 0.05;
-                cp.mesh.scale.set(s, s, 1);
-            }
-        }
-    }
-    renderer.render(scene, camera);
+  }, LONG_PRESS_MS);
 });
 
-// =========================================================
-// OVERLAYS
-// =========================================================
-const helpSheet = document.getElementById('helpSheet');
-const statsSheet = document.getElementById('statsSheet');
-const routesSheet = document.getElementById('routesSheet');
+attackBtn.addEventListener('pointermove', (e) => {
+  if (!btnDrag.active) return;
+  if (Math.hypot(e.clientX - btnDrag.sx, e.clientY - btnDrag.sy) > 8){
+    btnDrag.moved = true;
+    clearLongPressTimer();
+  }
+  if (btnDrag.moved){
+    closeReticleMenu();
+    const nx = Math.max(8, Math.min(window.innerWidth - 64, e.clientX - btnDrag.ox));
+    const ny = Math.max(44, Math.min(window.innerHeight - 104, e.clientY - btnDrag.oy));
+    reticleWrap.style.left = nx + 'px';
+    reticleWrap.style.top = ny + 'px';
+    reticleWrap.style.right = 'auto';
+    reticleWrap.style.bottom = 'auto';
+  }
+});
 
-document.getElementById('helpBtn').addEventListener('click', () => helpSheet.classList.add('show'));
-document.getElementById('statsBtn').addEventListener('click', () => { refreshStats(); statsSheet.classList.add('show'); });
-helpSheet.querySelector('.title').addEventListener('click', () => helpSheet.classList.remove('show'));
-document.getElementById('statsTitle').addEventListener('click', () => statsSheet.classList.remove('show'));
-document.getElementById('routesTitle').addEventListener('click', () => routesSheet.classList.remove('show'));
+const onReticleRelease = (e) => {
+  if (e) e.stopPropagation();
+  if (!btnDrag.active) return;
+  const elapsed = performance.now() - btnDrag.downAt;
+  const wasQuickTap = !btnDrag.moved && !longPressTriggered && elapsed < LONG_PRESS_MS;
+  btnDrag.active = false;
+  stopHoldAction();
 
-document.getElementById('routeName').addEventListener('click', openRoutesList);
+  if (wasQuickTap){
+    if (reticleMenu.classList.contains('open')) closeReticleMenu();
+    else openReticleMenu();
+  }
+};
 
-function openRoutesList() {
-    renderRoutesList();
-    routesSheet.classList.add('show');
+attackBtn.addEventListener('pointerup', onReticleRelease);
+attackBtn.addEventListener('pointercancel', onReticleRelease);
+
+/* =========================================================
+   STATS MODAL (TIMEFRAMES + TOUCH SCROLL ON CHART + WITHDRAW)
+   ========================================================= */
+const statsModal = document.getElementById('statsModal');
+const statsCard = statsModal.querySelector('.modal-card');
+const statsChartEl = document.getElementById('statsChart');
+const timeframeBar = document.getElementById('timeframeBar');
+const recipientSelect = document.getElementById('recipientSelect');
+const expenseHistoryList = document.getElementById('expenseHistoryList');
+const deleteSelectedHistBtn = document.getElementById('deleteSelectedHistBtn');
+const selectAllHistBtn = document.getElementById('selectAllHistBtn');
+const builtCountEl = document.getElementById('builtCountEl');
+const builtHousesList = document.getElementById('builtHousesList');
+const withdrawAllBtn = document.getElementById('withdrawAllBtn');
+
+function syncTimeframeUI(){
+  timeframeBar.querySelectorAll('.tf-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tf === selectedTimeframe);
+  });
 }
-function renderRoutesList() {
-    const body = document.getElementById('routeListBody');
-    body.innerHTML = '';
-    routes.forEach((r) => {
-        const item = document.createElement('div');
-        item.className = 'routeItem';
-        if (r === activeRoute) item.classList.add('active');
-        if (r.author === myId) item.classList.add('own');
-        const name = document.createElement('div');
-        name.className = 'rn';
-        name.textContent = r.name;
-        const cp = document.createElement('div');
-        cp.className = 'rc';
-        cp.textContent = `${r.checkpoints.length} rings`;
-        item.appendChild(name);
-        item.appendChild(cp);
-        if (r.author) {
-            const a = document.createElement('div');
-            a.className = 'author';
-            a.textContent = 'by ' + (r.author === myId ? 'you' : r.author);
-            item.appendChild(a);
-        }
-        item.addEventListener('click', () => {
-            if (activeRoute === r) return;
-            activeRoute = r;
-            setNextCheckpoint();
-            updateHud();
-            routesSheet.classList.remove('show');
-            toast(`Route: ${r.name}`, 'info', 1500);
-        });
-        body.appendChild(item);
+syncTimeframeUI();
+
+timeframeBar.querySelectorAll('.tf-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    selectedTimeframe = btn.dataset.tf;
+    store.set('chart_timeframe', selectedTimeframe);
+    syncTimeframeUI();
+    drawChart();
+  });
+});
+
+function getFilteredSeries(){
+  const base = tokenSeries.length ? tokenSeries : [{ t: Date.now(), val: tokens }];
+  if (selectedTimeframe === 'all') return base;
+  const now = Date.now();
+  const msMap = {
+    day: 24 * 60 * 60 * 1000,
+    week: 7 * 24 * 60 * 60 * 1000,
+    month: 30 * 24 * 60 * 60 * 1000
+  };
+  const cutoff = now - (msMap[selectedTimeframe] || msMap.day);
+  const filtered = base.filter(p => (p.t || now) >= cutoff);
+  if (filtered.length) return filtered;
+  return [base[base.length - 1]];
+}
+
+let chartScrollDrag = { active: false, lastY: 0 };
+statsChartEl.addEventListener('pointerdown', (e) => {
+  chartScrollDrag.active = true;
+  chartScrollDrag.lastY = e.clientY;
+  try{ statsChartEl.setPointerCapture(e.pointerId); }catch{}
+});
+statsChartEl.addEventListener('pointermove', (e) => {
+  if (!chartScrollDrag.active) return;
+  const dy = chartScrollDrag.lastY - e.clientY;
+  chartScrollDrag.lastY = e.clientY;
+  statsCard.scrollTop += dy;
+  statsModal.scrollTop += dy;
+});
+const stopChartScroll = (e) => {
+  if (!chartScrollDrag.active) return;
+  chartScrollDrag.active = false;
+  try{ if (e && e.pointerId !== undefined) statsChartEl.releasePointerCapture(e.pointerId); }catch{}
+};
+statsChartEl.addEventListener('pointerup', stopChartScroll);
+statsChartEl.addEventListener('pointercancel', stopChartScroll);
+
+function drawChart(){
+  const canvas = statsChartEl;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const pts = getFilteredSeries();
+  const maxV = Math.max(10, ...pts.map(p => p.val));
+  const minV = Math.min(0, ...pts.map(p => p.val));
+  const span = Math.max(1, maxV - minV);
+
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  pts.forEach((p, idx) => {
+    const x = pts.length === 1 ? canvas.width / 2 : (idx / (pts.length - 1)) * (canvas.width - 36) + 18;
+    const y = canvas.height - 20 - ((p.val - minV) / span) * (canvas.height - 40);
+    if (idx === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '12px sans-serif';
+  ctx.fillText(`[${selectedTimeframe.toUpperCase()}] Balance: ${tokens.toFixed(1)} | Peak: ${maxV.toFixed(1)}`, 14, 18);
+}
+
+function syncDeleteButtonState(){
+  deleteSelectedHistBtn.disabled = selectedExpenseIds.size === 0;
+  selectAllHistBtn.textContent = (expenseHistory.length > 0 && selectedExpenseIds.size === expenseHistory.length)
+    ? 'Unselect All'
+    : 'Select All';
+}
+
+function renderExpenseHistory(){
+  expenseHistoryList.innerHTML = '';
+  if (!expenseHistory.length){
+    expenseHistoryList.innerHTML = '<div style="padding:10px;color:#64748b;font-size:12px">No expenses yet</div>';
+    selectedExpenseIds.clear();
+    syncDeleteButtonState();
+    return;
+  }
+  expenseHistory.forEach((item) => {
+    const row = document.createElement('div');
+    row.className = 'hist-item' + (selectedExpenseIds.has(item.id) ? ' sel' : '');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = selectedExpenseIds.has(item.id);
+    cb.addEventListener('change', () => {
+      if (cb.checked) selectedExpenseIds.add(item.id);
+      else selectedExpenseIds.delete(item.id);
+      row.classList.toggle('sel', cb.checked);
+      syncDeleteButtonState();
     });
-    if (routes.length === 0) {
-        body.innerHTML = '<div style="color:rgba(255,255,255,0.4);font-size:10px;text-align:center;">No routes yet. Press "Route" in the top bar to build one.</div>';
-    }
+    const txt = document.createElement('span');
+    const timeStr = item.ts ? new Date(item.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+    txt.textContent = `-${item.amount} • ${item.reason}${timeStr ? ` (${timeStr})` : ''}`;
+    row.appendChild(cb);
+    row.appendChild(txt);
+    expenseHistoryList.appendChild(row);
+  });
+  syncDeleteButtonState();
 }
 
-// =========================================================
-// STATS: график
-// =========================================================
-let currentTf = 'all';
-document.querySelectorAll('.tfBtn').forEach(btn => {
+selectAllHistBtn.addEventListener('click', () => {
+  if (!expenseHistory.length) return;
+  if (selectedExpenseIds.size === expenseHistory.length){
+    selectedExpenseIds.clear();
+  } else {
+    selectedExpenseIds = new Set(expenseHistory.map(x => x.id));
+  }
+  renderExpenseHistory();
+});
+
+deleteSelectedHistBtn.addEventListener('click', () => {
+  if (!selectedExpenseIds.size) return;
+  expenseHistory = expenseHistory.filter(x => !selectedExpenseIds.has(x.id));
+  selectedExpenseIds.clear();
+  saveEconomy();
+  renderExpenseHistory();
+});
+
+function withdrawFromHouse(b, idx){
+  const amt = b.storedTokens || 0;
+  if (amt <= 0) return 0;
+  b.storedTokens = 0;
+  upsertBuildingMesh(b);
+  store.set('buildings', buildings);
+  recordTokenDelta(amt, `Withdraw house #${idx + 1}`, false);
+  publishMqtt({ type: 'BUILDING_BUILT', building: b });
+  return amt;
+}
+
+withdrawAllBtn.addEventListener('click', () => {
+  const myHouses = buildings.filter(b => b.owner === myPeerId);
+  let totalWithdrawn = 0;
+  myHouses.forEach((b, i) => {
+    totalWithdrawn += withdrawFromHouse(b, i);
+  });
+  if (totalWithdrawn > 0){
+    drawChart();
+    renderBuiltHouses();
+  }
+});
+
+function renderBuiltHouses(){
+  const myHouses = buildings.filter(b => b.owner === myPeerId);
+  builtCountEl.textContent = myHouses.length;
+  const totalStored = myHouses.reduce((acc, item) => acc + (item.storedTokens || 0), 0);
+  withdrawAllBtn.disabled = totalStored <= 0;
+
+  builtHousesList.innerHTML = '';
+  if (!myHouses.length){
+    builtHousesList.innerHTML = '<div style="color:#64748b">No houses built yet</div>';
+    return;
+  }
+  myHouses.forEach((b, i) => {
+    const row = document.createElement('div');
+    row.className = 'b-row';
+    const info = document.createElement('span');
+    info.textContent = `#${i + 1} (${b.x}, ${b.y}, ${b.z}) — stored: ${b.storedTokens || 0}`;
+    const btn = document.createElement('button');
+    btn.className = 'act-btn withdraw';
+    btn.textContent = 'Withdraw';
+    btn.disabled = (b.storedTokens || 0) <= 0;
     btn.addEventListener('click', () => {
-        document.querySelectorAll('.tfBtn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentTf = btn.dataset.tf;
-        refreshStats();
+      const amt = withdrawFromHouse(b, i);
+      if (amt > 0){
+        drawChart();
+        renderBuiltHouses();
+      }
     });
-});
-function tfToMs(tf) {
-    switch(tf) { case '1h': return 3600e3; case '24h': return 24*3600e3; case '7d': return 7*24*3600e3; default: return Infinity; }
+    row.appendChild(info);
+    row.appendChild(btn);
+    builtHousesList.appendChild(row);
+  });
 }
-function refreshStats() {
-    document.getElementById('statBalance').textContent = Stats.data.balance;
-    document.getElementById('statEarned').textContent = Stats.data.earned;
-    document.getElementById('statSpent').textContent = Stats.data.spent;
-    document.getElementById('statRoutes').textContent = Stats.data.routes;
-    document.getElementById('statBuilds').textContent = Stats.data.builds;
-    document.getElementById('statOrbs').textContent = Stats.data.orbs;
-    document.getElementById('statViolations').textContent = Stats.data.violations;
-    const pt = (Date.now() - Stats.data.playtimeStart) / 3600000;
-    document.getElementById('statPlaytime').textContent = pt.toFixed(1) + 'h';
-    drawChart(); renderTxList(); renderSendSection();
-}
-function drawChart() {
-    const canvas = document.getElementById('chartCanvas');
-    const wrap = document.getElementById('chartWrap');
-    const dpr = window.devicePixelRatio || 1;
-    const rect = wrap.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-    const W = rect.width, H = rect.height;
-    ctx.clearRect(0, 0, W, H);
-    const now = Date.now();
-    const rangeMs = tfToMs(currentTf);
-    const cutoff = now - rangeMs;
-    const snaps = Stats.data.snapshots.filter(s => s.ts >= cutoff);
-    if (snaps.length === 0) snaps.push({ ts: now, balance: Stats.data.balance });
-    const minTs = snaps[0].ts;
-    const maxTs = Math.max(snaps[snaps.length - 1].ts, now);
-    let minBal = Math.min(...snaps.map(s => s.balance));
-    let maxBal = Math.max(...snaps.map(s => s.balance));
-    if (maxBal === minBal) { maxBal = minBal + 1; }
-    const padL = 8, padR = 8, padT = 10, padB = 20;
-    const chartW = W - padL - padR;
-    const chartH = H - padT - padB;
-    function xOf(ts) { return padL + ((ts - minTs) / Math.max(1, maxTs - minTs)) * chartW; }
-    function yOf(bal) { return padT + chartH - ((bal - minBal) / (maxBal - minBal)) * chartH; }
-    ctx.beginPath();
-    ctx.moveTo(xOf(snaps[0].ts), H - padB);
-    for (const s of snaps) ctx.lineTo(xOf(s.ts), yOf(s.balance));
-    ctx.lineTo(xOf(snaps[snaps.length - 1].ts), H - padB);
-    ctx.closePath();
-    const grad = ctx.createLinearGradient(0, padT, 0, H - padB);
-    grad.addColorStop(0, 'rgba(125,211,252,0.35)');
-    grad.addColorStop(1, 'rgba(125,211,252,0)');
-    ctx.fillStyle = grad; ctx.fill();
-    ctx.beginPath(); ctx.strokeStyle = '#7dd3fc'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
-    for (let i = 0; i < snaps.length; i++) {
-        const s = snaps[i];
-        if (i === 0) ctx.moveTo(xOf(s.ts), yOf(s.balance));
-        else ctx.lineTo(xOf(s.ts), yOf(s.balance));
-    }
-    ctx.stroke();
-    const last = snaps[snaps.length - 1];
-    ctx.beginPath(); ctx.arc(xOf(last.ts), yOf(last.balance), 3, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffd166'; ctx.fill();
-    document.getElementById('chartMin').textContent = minBal;
-    document.getElementById('chartMax').textContent = maxBal;
-    const delta = Stats.data.balance - snaps[0].balance;
-    const deltaEl = document.getElementById('chartDelta');
-    deltaEl.textContent = (delta >= 0 ? '+' : '') + delta + ' JP';
-    deltaEl.classList.toggle('neg', delta < 0);
-    ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.font = '9px Arial'; ctx.textAlign = 'center';
-    const labels = 3;
-    for (let i = 0; i <= labels; i++) {
-        const t = minTs + ((maxTs - minTs) * i) / labels;
-        const d = new Date(t);
-        const label = currentTf === '1h' || currentTf === '24h'
-            ? d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0')
-            : (d.getMonth() + 1) + '/' + d.getDate();
-        ctx.fillText(label, xOf(t), H - 6);
-    }
-}
-function renderTxList() {
-    const el = document.getElementById('txList');
-    el.innerHTML = '';
-    const recent = Stats.data.txLog.slice(-50).reverse();
-    if (recent.length === 0) { el.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:9px;">No transactions yet</div>'; return; }
-    for (const tx of recent) {
-        const row = document.createElement('div');
-        row.className = 'txRow';
-        const amt = document.createElement('span');
-        amt.className = 'amt ' + (tx.amount >= 0 ? 'pos' : 'neg');
-        amt.textContent = (tx.amount >= 0 ? '+' : '') + tx.amount;
-        const reason = document.createElement('span');
-        reason.className = 'reason'; reason.textContent = tx.reason;
-        const time = document.createElement('span');
-        time.className = 'time';
-        const d = new Date(tx.ts);
-        time.textContent = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
-        row.appendChild(amt); row.appendChild(reason); row.appendChild(time);
-        el.appendChild(row);
-    }
-}
-let resetTapCount = 0, resetLastTap = 0;
-document.getElementById('resetStatsBtn').addEventListener('click', () => {
-    const now = Date.now();
-    if (now - resetLastTap < 500) { Stats.reset(); refreshStats(); toast('Stats reset', 'success'); resetTapCount = 0; }
-    else { resetTapCount = 1; toast('Tap again to confirm reset', 'warn'); }
-    resetLastTap = now;
-});
-window.addEventListener('resize', () => {
-    if (statsSheet.classList.contains('show')) drawChart();
+
+document.getElementById('sendTokensBtn').addEventListener('click', () => {
+  const to = (document.getElementById('recipientCustom').value.trim() || recipientSelect.value || '').trim();
+  const amt = parseFloat(document.getElementById('transferAmount').value);
+  if (!to || to === myPeerId || isNaN(amt) || amt <= 0 || tokens < amt) return;
+  const fee = Number((amt * 0.01).toFixed(2));
+  const net = Number((amt - fee).toFixed(2));
+  recordTokenDelta(-amt, `Transfer to ${to}`, true);
+  if (fee > 0) routeAuthorFee(fee, 'transfer');
+  publishMqtt({ type: 'TRANSFER', to, amount: net });
+  drawChart();
+  renderExpenseHistory();
 });
 
-// =========================================================
-// MQTT connect
-// =========================================================
-connectMqtt();
+function openStats(){
+  recipientSelect.innerHTML = '';
+  const peerKeys = Array.from(remotePeers.keys()).filter(k => k !== myPeerId);
+  if (!peerKeys.length){
+    const opt = document.createElement('option');
+    opt.value = ''; opt.textContent = 'No online peers';
+    recipientSelect.appendChild(opt);
+  } else {
+    peerKeys.forEach(k => {
+      const opt = document.createElement('option');
+      opt.value = k; opt.textContent = k;
+      recipientSelect.appendChild(opt);
+    });
+  }
+  selectedExpenseIds.clear();
+  syncTimeframeUI();
+  drawChart();
+  renderExpenseHistory();
+  renderBuiltHouses();
+  statsModal.classList.add('show');
+}
+document.getElementById('tokenCounterDock').addEventListener('click', openStats);
+document.getElementById('closeStatsBtn').addEventListener('click', () => statsModal.classList.remove('show'));
+
+const helpModal = document.getElementById('helpModal');
+document.getElementById('helpBtn').addEventListener('click', () => helpModal.classList.add('show'));
+document.getElementById('closeHelpBtn').addEventListener('click', () => helpModal.classList.remove('show'));
+
+/* =========================================================
+   FLIGHT PHYSICS: LINEAR SPEED, ZERO GRAVITY AT CENTER &
+   MATCHING OUTER HEIGHT, UNBOUNDED FREE FLIGHT IN ANY DIRECTION
+   ========================================================= */
+let velocity = new THREE.Vector3(0, 0, 0);
+let angularVelocityX = 0;
+let angularVelocityZ = 0;
+const clock = new THREE.Clock();
+
+const OUTER_ZERO_GRAVITY_RADIUS = PLANET_RADIUS + 1200;
+
+function computeGravity(pos){
+  const r = pos.length();
+  if (r < 0.001) return new THREE.Vector3(0, 0, 0);
+  if (r >= OUTER_ZERO_GRAVITY_RADIUS) return new THREE.Vector3(0, 0, 0);
+
+  const dir = pos.clone().normalize();
+  const innerZeroMask = THREE.MathUtils.smoothstep(r, 0, 260);
+  const outerZeroMask = 1.0 - THREE.MathUtils.smoothstep(r, OUTER_ZERO_GRAVITY_RADIUS - 320, OUTER_ZERO_GRAVITY_RADIUS);
+  const g = GRAVITY * innerZeroMask * outerZeroMask;
+  return r < PLANET_RADIUS ? dir.multiplyScalar(g) : dir.multiplyScalar(-g);
+}
+
+function updateHoldActions(nowMs){
+  if (!isHoldingAttack || !holdMode) return;
+  const elapsed = nowMs - holdStartTime;
+
+  if (holdMode === 'build' && targetBuildingId){
+    const step = Math.floor(elapsed / 800);
+    if (step > lastDepositStep && tokens >= 1){
+      lastDepositStep = step;
+      recordTokenDelta(-1, 'Stock house', true);
+      const b = buildings.find(item => item.id === targetBuildingId);
+      if (b){
+        b.storedTokens = (b.storedTokens || 0) + 1;
+        upsertBuildingMesh(b);
+        store.set('buildings', buildings);
+        publishMqtt({ type: 'BUILDING_BUILT', building: b });
+      }
+    }
+  } else if (holdMode === 'hack' && targetBuildingId){
+    const warningMs = 9000;
+    if (elapsed >= warningMs){
+      const drainStep = Math.floor((elapsed - warningMs) / 700);
+      if (drainStep > lastDrainStep){
+        lastDrainStep = drainStep;
+        const b = buildings.find(item => item.id === targetBuildingId);
+        if (b && (b.storedTokens || 0) > 0){
+          b.storedTokens -= 1;
+          upsertBuildingMesh(b);
+          store.set('buildings', buildings);
+          recordTokenDelta(1, 'House hack', false);
+          publishMqtt({ type: 'BUILDING_LOOTED', buildingId: b.id, amount: 1, by: myPeerId });
+        } else {
+          stopHoldAction();
+        }
+      }
+    }
+  } else if (holdMode === 'hack_peer' && targetPeerId){
+    const peerEntry = remotePeers.get(targetPeerId);
+    if (!peerEntry || player.position.distanceTo(peerEntry.mesh.position) > 85){
+      stopHoldAction();
+      return;
+    }
+    const stealStep = Math.floor(elapsed / 850);
+    if (stealStep > lastDrainStep){
+      lastDrainStep = stealStep;
+      recordTokenDelta(1, `Mid-flight hack ${targetPeerId}`, false);
+      publishMqtt({ type: 'PEER_HACKED', target: targetPeerId, attacker: myPeerId, amount: 1 });
+    }
+  }
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  clock.getDelta();
+  const nowMs = performance.now();
+
+  if (Date.now() >= frozenUntil){
+    if (keys['ArrowLeft']) angularVelocityZ -= TURN_SPEED;
+    if (keys['ArrowRight']) angularVelocityZ += TURN_SPEED;
+    if (keys['ArrowUp']) angularVelocityX -= TURN_SPEED;
+    if (keys['ArrowDown']) angularVelocityX += TURN_SPEED;
+
+    if (touchJoystick.active){
+      angularVelocityX += touchJoystick.moveY * TOUCH_TURN_SPEED;
+      angularVelocityZ += touchJoystick.moveX * TOUCH_TURN_SPEED;
+    }
+
+    angularVelocityX *= DAMPING_TURN;
+    angularVelocityZ *= DAMPING_TURN;
+
+    const deltaQuaternion = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(angularVelocityX, 0, angularVelocityZ, 'YXZ')
+    );
+    player.quaternion.multiply(deltaQuaternion);
+
+    let signedThrust = 0;
+    if (keys['Space']){
+      signedThrust = FLY_SPEED * (superThrust ? 2.0 : 1.0);
+    } else if (keys['KeyB']){
+      signedThrust = -FLY_SPEED * (superThrust ? 2.0 : 1.0);
+    } else if (Math.abs(currentThrottle) > 0.02){
+      signedThrust = FLY_SPEED * currentThrottle;
+    }
+
+    const localUp = new THREE.Vector3(0, 1, 0).applyQuaternion(player.quaternion);
+    if (isReverseThrust) localUp.negate();
+
+    if (Math.abs(signedThrust) > 0){
+      velocity.add(localUp.multiplyScalar(signedThrust));
+    }
+  } else {
+    angularVelocityX *= 0.85;
+    angularVelocityZ *= 0.85;
+  }
+
+  velocity.add(computeGravity(player.position));
+  velocity.multiplyScalar(DAMPING_MOVE);
+  player.position.add(velocity);
+
+  for (const item of animatedGyroParts){
+    item.obj.rotation.z += item.speed;
+  }
+
+  for (const ring of routeRings){
+    if (nowMs >= ring.cooldownUntil && player.position.distanceTo(ring.mesh.position) < 19){
+      ring.cooldownUntil = nowMs + RING_COOLDOWN_MS;
+      ring.mat.opacity = RING_FADED_OPACITY;
+      recordTokenDelta(2, 'Route ring', false);
+    }
+  }
+
+  updateRouteRingsFade(nowMs);
+  updateCentersInfluence();
+  updateHoldActions(nowMs);
+
+  backgroundPlanets.forEach(planet => {
+    planet.mesh.rotation.y += planet.rotSpeed;
+    planet.mesh.rotation.x += planet.rotSpeed * 0.2;
+  });
+
+  renderer.render(scene, camera);
+}
+
+animate();
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+
 </script>
 </body>
 </html>
