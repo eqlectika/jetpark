@@ -129,6 +129,27 @@ canvas{
 .chat-line{background:none;padding:1px 2px;color:#f1f5f9;text-shadow:0 1px 2px #000}
 .chat-line span{color:#38bdf8;font-weight:600}
 
+#peerLabelsLayer{
+  position:fixed;inset:0;z-index:25;pointer-events:none;overflow:hidden;
+}
+.peer-neon-tag{
+  position:fixed;left:0;top:0;
+  transform:translate(-50%,-100%) rotate(0deg);
+  font-family:var(--app-font);
+  font-size:12px;
+  font-weight:600;
+  line-height:1.2;
+  letter-spacing:.4px;
+  color:#7dd3fc;
+  text-shadow:
+    0 0 4px rgba(56,189,248,.95),
+    0 0 10px rgba(56,189,248,.75),
+    0 0 18px rgba(14,165,233,.55);
+  white-space:nowrap;
+  pointer-events:none;
+  will-change:transform;
+}
+
 .modal-overlay{
   position:fixed;inset:0;z-index:100;display:none;
   background:rgba(4,6,14,.94);overflow-y:auto;touch-action:pan-y;
@@ -277,6 +298,8 @@ canvas#statsChart:active{cursor:grabbing}
   <div class="rm-hint">Long-press the crosshair to activate the mode</div>
 </div>
 
+<div id="peerLabelsLayer"></div>
+
 <div id="chatFeed"></div>
 <div class="bottom-bar">
   <div class="chat-dock">
@@ -341,6 +364,7 @@ canvas#statsChart:active{cursor:grabbing}
     <p><strong>Desktop Controls:</strong> Use Arrow keys (<code>←</code> <code>↑</code> <code>↓</code> <code>→</code>) or hold left mouse button and drag to tilt; hold <code>Space</code> for forward thrust (double-tap <code>Space</code> for boost) or <code>B</code> for reverse thrust.</p>
     <p><strong>Reticle &amp; Modes:</strong> Drag the crosshair to aim. <strong>Tap</strong> the crosshair to open or close the mode menu (<code>Build</code>, <code>Attack</code>, <code>Hack</code>), select a mode, and <strong>long-press</strong> the crosshair (or hold/press <code>F</code>) to activate it.</p>
     <p><strong>Free Flight &amp; Gravity:</strong> Fly in any direction indefinitely. Gravity is zero at the planet center and zero at the matching outer height.</p>
+    <p><strong>Water, Terrain &amp; Pass-Through Zones:</strong> The transparent shimmering water zone slows thrust, gravity, and momentum. Solid terrain is opaque and impassable without surface movement, with pass-through openings and a pendulum self-leveling lever and camera guard shell.</p>
     <p><strong>Houses, Roofs &amp; Bridges:</strong> Buildings place on your current side without overlapping, feature roof accents matching the nearest sector center, and can span horizontally as arches or bridges when anchored to another building wall.</p>
     <p><strong>Hack Houses &amp; Flyers:</strong> Hack stored tokens from other players' buildings or hack nearby players mid-flight.</p>
     <div class="help-footer-logo">
@@ -394,6 +418,12 @@ const GRAVITY = 0.0043333;
 const DAMPING_TURN = 0.99;
 const DAMPING_MOVE = 0.99;
 const PLANET_RADIUS = 1500;
+const PLANET_SHELL_THICKNESS = 18;
+const WATER_OUTER_OFFSET = 14;
+const WATER_INNER_OFFSET = 14;
+const WATER_THRUST_FACTOR = 0.55;
+const WATER_GRAVITY_FACTOR = 0.6;
+const WATER_DAMPING_MOVE = 0.945;
 const RING_COOLDOWN_MS = 4000;
 const RING_ACTIVE_OPACITY = 0.9;
 const RING_FADED_OPACITY = 0.14;
@@ -492,6 +522,7 @@ const chatFeed = document.getElementById('chatFeed');
 const chatInput = document.getElementById('chatInput');
 const attackBtn = document.getElementById('attackBtn');
 const reticleMenu = document.getElementById('reticleMenu');
+const peerLabelsLayer = document.getElementById('peerLabelsLayer');
 
 peerIdInput.value = myPeerId;
 tokenBalanceEl.textContent = Number.isInteger(tokens) ? tokens : tokens.toFixed(1);
@@ -576,6 +607,24 @@ scene.add(player);
 camera.quaternion.setFromEuler(new THREE.Euler(Math.PI, 0, 0, 'YXZ'));
 player.add(camera);
 
+/* Invisible protective guard shell around camera focus so focus never enters solid terrain */
+const cameraGuardShellRadius = 2.6;
+
+/* Pendulum counterweight lever (груз на ножке-рычаге) for slow self-leveling & support */
+const pendulumPivot = new THREE.Group();
+const pendulumStem = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.025, 0.025, 1.35, 8),
+  new THREE.MeshBasicMaterial({ color: 0x94a3b8, transparent: true, opacity: 0.35 })
+);
+pendulumStem.position.set(0, -0.675, 0);
+const pendulumWeight = new THREE.Mesh(
+  new THREE.SphereGeometry(0.13, 12, 10),
+  new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.55 })
+);
+pendulumWeight.position.set(0, -1.35, 0);
+pendulumPivot.add(pendulumStem, pendulumWeight);
+player.add(pendulumPivot);
+
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -587,61 +636,370 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-scene.add(new THREE.AmbientLight(0x94a3b8, 1.35));
-const sunLight = new THREE.DirectionalLight(0xffffff, 2.4);
+scene.add(new THREE.AmbientLight(0x8899b4, 0.9));
+const sunLight = new THREE.DirectionalLight(0xffffff, 1.9);
 sunLight.position.set(900, 2200, 700);
 scene.add(sunLight);
-const rimLight = new THREE.DirectionalLight(0x7dd3fc, 1.0);
+const rimLight = new THREE.DirectionalLight(0x7dd3fc, 0.75);
 rimLight.position.set(-1200, -1600, -900);
 scene.add(rimLight);
 
-/* =========================================================
-   SPHERE PLANET AT RADIUS 1500 — WIRE ONLY WITH DISTANCE FADE
-   ========================================================= */
-const planetGeometry = new THREE.SphereGeometry(PLANET_RADIUS, 72, 54);
-
-const planetMaterial = new THREE.ShaderMaterial({
-  wireframe: false,
-  transparent: true,
-  side: THREE.DoubleSide,
-  uniforms: {
-    uSize: { value: 0.05 }
+/* Slow-moving external light sources: hidden behind planet body, light bounce through pass-through windows */
+const driftingExteriorLights = [
+  {
+    light: new THREE.PointLight(0xfff0c2, 2.2, 4200, 0),
+    baseIntensity: 2.2,
+    orbitRadius: PLANET_RADIUS + 460,
+    speed: 0.000045,
+    phase: 0.2,
+    tiltAxis: new THREE.Vector3(0.7071, 0.7071, 0).normalize(),
+    dirVec: new THREE.Vector3()
   },
-  vertexShader: `
-    varying vec3 vWorldPosition;
-    void main(){
-      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-      vWorldPosition = worldPosition.xyz;
-      gl_Position = projectionMatrix * viewMatrix * worldPosition;
-    }
-  `,
-  fragmentShader: `
-    varying vec3 vWorldPosition;
-    uniform float uSize;
-    void main(){
-      vec2 p1 = vWorldPosition.xy * uSize;
-      vec2 p2 = vWorldPosition.zy * uSize;
-      vec2 grid = abs(fract(p1 - 0.5) - 0.5) / max(fwidth(p1), 0.0001);
-      vec2 grid2 = abs(fract(p2 - 0.5) - 0.5) / max(fwidth(p2), 0.0001);
-      float line = min(min(grid.x, grid.y), min(grid2.x, grid2.y));
-      float thinLine = 1.0 - min(line / 0.65, 1.0);
-      float dist = length(vWorldPosition - cameraPosition);
-      float farFade = 1.0 - smoothstep(220.0, 2200.0, dist);
-      float alpha = thinLine * farFade * 0.85;
-      if (alpha < 0.01) discard;
-      gl_FragColor = vec4(0.24, 0.36, 0.92, alpha);
-    }
-  `
+  {
+    light: new THREE.PointLight(0x93c5fd, 1.8, 4200, 0),
+    baseIntensity: 1.8,
+    orbitRadius: PLANET_RADIUS + 520,
+    speed: -0.000032,
+    phase: 2.3,
+    tiltAxis: new THREE.Vector3(-0.7071, 0.7071, 0).normalize(),
+    dirVec: new THREE.Vector3()
+  },
+  {
+    light: new THREE.PointLight(0xfde68a, 1.6, 4000, 0),
+    baseIntensity: 1.6,
+    orbitRadius: PLANET_RADIUS + 490,
+    speed: 0.000026,
+    phase: 4.1,
+    tiltAxis: new THREE.Vector3(0, 0.7071, 0.7071).normalize(),
+    dirVec: new THREE.Vector3()
+  }
+];
+const passThroughBounceLight = new THREE.PointLight(0x93c5fd, 0, 2600, 0);
+scene.add(passThroughBounceLight);
+
+driftingExteriorLights.forEach((item) => {
+  scene.add(item.light);
 });
 
-const planetMesh = new THREE.Mesh(planetGeometry, planetMaterial);
-scene.add(planetMesh);
+const passThroughAnchors = [
+  new THREE.Vector3(0.7071, 0.7071, 0).normalize(),
+  new THREE.Vector3(-0.7071, 0.7071, 0).normalize(),
+  new THREE.Vector3(0.7071, -0.7071, 0).normalize(),
+  new THREE.Vector3(-0.7071, -0.7071, 0).normalize(),
+  new THREE.Vector3(0, 0.7071, 0.7071).normalize(),
+  new THREE.Vector3(0, -0.7071, -0.7071).normalize()
+];
+
+const _tmpCamPos = new THREE.Vector3();
+const _tmpCamDir = new THREE.Vector3();
+
+function isLightOccludedByPlanet(lightDir, camPos){
+  /* If light is on the far hemisphere relative to camera and planet body is between them */
+  const camR = camPos.length();
+  if (camR < 0.001) return false;
+  _tmpCamDir.copy(camPos).divideScalar(camR);
+  const cosAngle = lightDir.dot(_tmpCamDir);
+  if (cosAngle > 0.25) return false;
+  /* Occluded if camera is inside/near planet and looking away from light direction, or light is behind planet limb */
+  const sinLight = Math.sqrt(Math.max(0, 1 - cosAngle * cosAngle));
+  const limbCos = Math.min(1, PLANET_RADIUS / Math.max(PLANET_RADIUS + 1, camR));
+  return cosAngle < -limbCos * 0.65 && sinLight < 0.85;
+}
+
+function updateDriftingExteriorLights(elapsedSec){
+  camera.getWorldPosition(_tmpCamPos);
+  let bestBounceFactor = 0;
+  let bestAnchor = null;
+
+  for (let i = 0; i < driftingExteriorLights.length; i++){
+    const item = driftingExteriorLights[i];
+    const angle = item.phase + elapsedSec * item.speed;
+    item.dirVec.set(Math.cos(angle), Math.sin(angle * 0.7), Math.sin(angle)).normalize();
+    item.dirVec.applyAxisAngle(item.tiltAxis, 0.55).normalize();
+    item.light.position.copy(item.dirVec).multiplyScalar(item.orbitRadius);
+
+    const occluded = isLightOccludedByPlanet(item.dirVec, _tmpCamPos);
+    const targetIntensity = occluded ? 0 : item.baseIntensity;
+    item.light.intensity += (targetIntensity - item.light.intensity) * 0.2;
+
+    if (!occluded){
+      for (let a = 0; a < passThroughAnchors.length; a++){
+        const align = item.dirVec.dot(passThroughAnchors[a]);
+        if (align > 0.78){
+          const bounce = (align - 0.78) / 0.22;
+          if (bounce > bestBounceFactor){
+            bestBounceFactor = bounce;
+            bestAnchor = passThroughAnchors[a];
+          }
+        }
+      }
+    }
+  }
+
+  if (bestAnchor && bestBounceFactor > 0){
+    passThroughBounceLight.position.copy(bestAnchor).multiplyScalar(PLANET_RADIUS - 120);
+    passThroughBounceLight.intensity += (bestBounceFactor * 1.1 - passThroughBounceLight.intensity) * 0.2;
+  } else {
+    passThroughBounceLight.intensity += (0 - passThroughBounceLight.intensity) * 0.2;
+  }
+}
+
+/* =========================================================
+   BASE SHELL (GRID ONLY HERE), SHIMMERING REFRACTIVE WATER,
+   AND 100% OPAQUE SOLID TERRAIN
+   ========================================================= */
+function createBaseSurfaceGridMaterial(baseFillAlpha, gridAlpha, gridScale){
+  return new THREE.ShaderMaterial({
+    wireframe: false,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    uniforms: {
+      uSize: { value: gridScale },
+      uBaseFill: { value: baseFillAlpha },
+      uGridAlpha: { value: gridAlpha }
+    },
+    vertexShader: `
+      varying vec3 vWorldPosition;
+      void main(){
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPosition.xyz;
+        gl_Position = projectionMatrix * viewMatrix * worldPosition;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vWorldPosition;
+      uniform float uSize;
+      uniform float uBaseFill;
+      uniform float uGridAlpha;
+      void main(){
+        float dist = length(vWorldPosition - cameraPosition);
+        float farFade = 1.0 - smoothstep(260.0, 2400.0, dist);
+        vec2 p1 = vWorldPosition.xy * uSize;
+        vec2 p2 = vWorldPosition.zy * uSize;
+        vec2 grid = abs(fract(p1 - 0.5) - 0.5) / max(fwidth(p1), 0.0001);
+        vec2 grid2 = abs(fract(p2 - 0.5) - 0.5) / max(fwidth(p2), 0.0001);
+        float line = min(min(grid.x, grid.y), min(grid2.x, grid2.y));
+        float thinLine = 1.0 - min(line / 0.65, 1.0);
+        float alpha = max(uBaseFill * farFade, thinLine * farFade * uGridAlpha);
+        if (alpha < 0.005) discard;
+        vec3 col = mix(vec3(0.01, 0.01, 0.015), vec3(0.16, 0.2, 0.28), thinLine * 0.75);
+        gl_FragColor = vec4(col, alpha);
+      }
+    `
+  });
+}
+
+function createRefractiveWaterMaterial(baseOpacity, timeUniform){
+  return new THREE.ShaderMaterial({
+    wireframe: false,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    uniforms: {
+      uTime: timeUniform,
+      uBaseOpacity: { value: baseOpacity }
+    },
+    vertexShader: `
+      varying vec3 vWorldPosition;
+      varying vec3 vWorldNormal;
+      void main(){
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPosition.xyz;
+        vWorldNormal = normalize(mat3(modelMatrix) * normal);
+        gl_Position = projectionMatrix * viewMatrix * worldPosition;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vWorldPosition;
+      varying vec3 vWorldNormal;
+      uniform float uTime;
+      uniform float uBaseOpacity;
+      void main(){
+        vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+        vec3 n = normalize(vWorldNormal);
+        float ndotv = abs(dot(n, viewDir));
+        float fresnel = pow(1.0 - clamp(ndotv, 0.0, 1.0), 2.4);
+
+        vec3 refractDir = refract(-viewDir, n, 0.75);
+        float waveA = sin(vWorldPosition.x * 0.035 + refractDir.x * 4.5 + uTime * 1.4);
+        float waveB = cos(vWorldPosition.z * 0.035 + refractDir.z * 4.5 - uTime * 1.1);
+        float waveC = sin((vWorldPosition.y + vWorldPosition.x) * 0.025 + uTime * 0.9);
+        float shimmer = clamp((waveA * 0.45 + waveB * 0.35 + waveC * 0.2) * 0.5 + 0.5, 0.0, 1.0);
+        float caustic = pow(shimmer, 3.2);
+
+        float dist = length(vWorldPosition - cameraPosition);
+        float farFade = 1.0 - smoothstep(260.0, 2600.0, dist);
+
+        vec3 deepWater = vec3(0.03, 0.14, 0.26);
+        vec3 refractedTint = vec3(0.08, 0.44, 0.68) + refractDir * 0.06;
+        vec3 iridescence = mix(refractedTint, vec3(0.35, 0.8, 0.95), shimmer * 0.55);
+        vec3 col = mix(deepWater, iridescence, 0.45 + fresnel * 0.45) + vec3(0.4, 0.78, 0.96) * caustic * 0.26;
+
+        float alpha = clamp((uBaseOpacity * 0.42 + fresnel * 0.24 + caustic * 0.14) * farFade, 0.015, 0.38);
+        if (alpha < 0.006) discard;
+        gl_FragColor = vec4(col, alpha);
+      }
+    `
+  });
+}
+
+const waterTimeUniform = { value: 0 };
+
+const planetShellGroup = new THREE.Group();
+scene.add(planetShellGroup);
+
+const baseShellLayers = [
+  { offset: 0, baseFill: 0.22, gridAlpha: 0.36, gridScale: 0.05, segW: 72, segH: 54 },
+  { offset: -0.5, baseFill: 0.14, gridAlpha: 0.18, gridScale: 0.05, segW: 64, segH: 48 },
+  { offset: -1.0, baseFill: 0.18, gridAlpha: 0.24, gridScale: 0.05, segW: 64, segH: 48 }
+];
+
+const planetShellMeshes = baseShellLayers.map((layer) => {
+  const r = Math.max(100, PLANET_RADIUS + layer.offset * PLANET_SHELL_THICKNESS);
+  const geo = new THREE.SphereGeometry(r, layer.segW, layer.segH);
+  const mat = createBaseSurfaceGridMaterial(layer.baseFill, layer.gridAlpha, layer.gridScale);
+  const mesh = new THREE.Mesh(geo, mat);
+  planetShellGroup.add(mesh);
+  return mesh;
+});
+
+const planetMesh = planetShellMeshes[0];
+
+const waterOuterRadius = PLANET_RADIUS + WATER_OUTER_OFFSET;
+const waterInnerRadius = Math.max(100, PLANET_RADIUS - WATER_INNER_OFFSET);
+
+const waterOuterMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(waterOuterRadius, 72, 54),
+  createRefractiveWaterMaterial(0.22, waterTimeUniform)
+);
+const waterInnerMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(waterInnerRadius, 72, 54),
+  createRefractiveWaterMaterial(0.11, waterTimeUniform)
+);
+planetShellGroup.add(waterOuterMesh, waterInnerMesh);
+
+function isInWaterLayer(pos){
+  const r = pos.length();
+  return r >= waterInnerRadius && r <= waterOuterRadius;
+}
+
+/* =========================================================
+   PRONONOUNCED IRREGULAR SOLID TERRAIN (100% OPAQUE, NO GRID)
+   & PASS-THROUGH WINDOWS
+   ========================================================= */
+function sampleTerrainAtDir(dir){
+  const n = dir.clone().normalize();
+  const ridgeA = Math.sin(n.x * 5.0 + n.y * 3.0) * Math.cos(n.z * 4.0 - n.x * 2.0);
+  const ridgeB = Math.sin(n.y * 8.0 - n.z * 6.0) * 0.5;
+  const landmass = ridgeA + ridgeB;
+
+  let minWindowAngle = Infinity;
+  for (const anchor of passThroughAnchors){
+    const ang = n.angleTo(anchor);
+    if (ang < minWindowAngle) minWindowAngle = ang;
+  }
+  const windowRadiusRad = 0.24;
+  const isPassThrough = minWindowAngle < windowRadiusRad || landmass < -0.58;
+
+  const outerRelief = (landmass * 16.0) + (ridgeB * 7.0);
+  const innerRelief = (-landmass * 15.0) - (ridgeA * 6.0);
+
+  let outerSolidR = PLANET_RADIUS + Math.max(4, 10 + outerRelief);
+  let innerSolidR = PLANET_RADIUS - Math.max(4, 10 - innerRelief);
+
+  if (isPassThrough){
+    outerSolidR = PLANET_RADIUS - 24;
+    innerSolidR = PLANET_RADIUS - 32;
+  }
+
+  return {
+    isPassThrough,
+    innerSolidR,
+    outerSolidR
+  };
+}
+
+function buildDisplacedShellGeometry(radius, segW, segH, useOuterSide){
+  const geo = new THREE.SphereGeometry(radius, segW, segH);
+  const posAttr = geo.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < posAttr.count; i++){
+    v.fromBufferAttribute(posAttr, i);
+    const dir = v.clone().normalize();
+    const info = sampleTerrainAtDir(dir);
+    const targetR = useOuterSide ? info.outerSolidR : info.innerSolidR;
+    v.copy(dir).multiplyScalar(targetR);
+    posAttr.setXYZ(i, v.x, v.y, v.z);
+  }
+  posAttr.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+
+const solidOuterGeo = buildDisplacedShellGeometry(PLANET_RADIUS, 88, 66, true);
+const solidInnerGeo = buildDisplacedShellGeometry(PLANET_RADIUS, 88, 66, false);
+
+const solidTerrainMat = new THREE.MeshStandardMaterial({
+  color: 0x3b2f24,
+  roughness: 0.85,
+  metalness: 0.14,
+  transparent: false,
+  opacity: 1.0,
+  side: THREE.DoubleSide
+});
+
+const solidOuterMesh = new THREE.Mesh(solidOuterGeo, solidTerrainMat);
+const solidInnerMesh = new THREE.Mesh(solidInnerGeo, solidTerrainMat);
+planetShellGroup.add(solidOuterMesh, solidInnerMesh);
+
+function resolveSolidTerrainCollision(pos, vel, clearance = 0.45){
+  const r = pos.length();
+  if (r < 0.001) return false;
+  const dir = pos.clone().normalize();
+  const info = sampleTerrainAtDir(dir);
+  if (info.isPassThrough) return false;
+
+  const paddedOuter = info.outerSolidR + clearance;
+  const paddedInner = Math.max(10, info.innerSolidR - clearance);
+
+  if (r <= paddedOuter && r >= paddedInner){
+    const distToOuter = paddedOuter - r;
+    const distToInner = r - paddedInner;
+    if (distToOuter <= distToInner){
+      pos.copy(dir).multiplyScalar(paddedOuter);
+    } else {
+      pos.copy(dir).multiplyScalar(paddedInner);
+    }
+    /* No surface movement along solid terrain: zero velocity on contact */
+    vel.set(0, 0, 0);
+    return true;
+  }
+  return false;
+}
+
+function guardCameraFocusAgainstTerrain(camWorldPos){
+  const r = camWorldPos.length();
+  if (r < 0.001) return;
+  const dir = camWorldPos.clone().normalize();
+  const info = sampleTerrainAtDir(dir);
+  if (info.isPassThrough) return;
+
+  const guardOuter = info.outerSolidR + cameraGuardShellRadius;
+  const guardInner = Math.max(10, info.innerSolidR - cameraGuardShellRadius);
+  if (r <= guardOuter && r >= guardInner){
+    const distToOuter = guardOuter - r;
+    const distToInner = r - guardInner;
+    const safeR = distToOuter <= distToInner ? guardOuter : guardInner;
+    camWorldPos.copy(dir).multiplyScalar(safeR);
+  }
+}
 
 /* =========================================================
    SIX DIRECTIONS — ARCHITECTURAL CENTERS ON BOTH SIDES,
    GROWING AS BUILDINGS INCREASE
    ========================================================= */
-const collidableObjects = [planetMesh];
+const collidableObjects = [...planetShellMeshes, solidOuterMesh, solidInnerMesh];
 const linePalette = [0x38bdf8, 0xf472b6, 0xfbbf24, 0x4ade80, 0xc084fc, 0xfb7185];
 
 const sixDirections = [
@@ -748,7 +1106,16 @@ centerSpecs.forEach((spec) => {
   group.position.copy(dir).multiplyScalar(baseR);
   group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
   scene.add(group);
-  centerObjects.push({ spec, dir, baseR, up, group, elevationBoost: 0, growthScale: 1.0 });
+  centerObjects.push({
+    spec,
+    dir,
+    baseR,
+    up,
+    group,
+    cPos: dir.clone().multiplyScalar(baseR),
+    elevationBoost: 0,
+    growthScale: 1.0
+  });
 });
 
 function getNearestCenterSpec(pos){
@@ -765,30 +1132,38 @@ function getNearestCenterSpec(pos){
   return best;
 }
 
-function updateCentersInfluence(){
+let lastCentersUpdateMs = 0;
+function updateCentersInfluence(nowMs){
+  if (nowMs - lastCentersUpdateMs < 90) return;
+  lastCentersUpdateMs = nowMs;
+
   const totalBuildings = buildings.length;
-  for (const c of centerObjects){
-    const cPos = c.dir.clone().multiplyScalar(c.baseR);
+  for (let i = 0; i < centerObjects.length; i++){
+    const c = centerObjects[i];
     let localCount = 0;
     let score = 0;
 
-    for (const b of buildings){
-      const bPos = new THREE.Vector3(b.x, b.y, b.z);
-      const bSide = b.side ?? (bPos.length() >= PLANET_RADIUS ? 1 : -1);
+    for (let j = 0; j < totalBuildings; j++){
+      const b = buildings[j];
+      const bLenSq = b.x * b.x + b.y * b.y + b.z * b.z;
+      const bSide = b.side ?? (bLenSq >= PLANET_RADIUS * PLANET_RADIUS ? 1 : -1);
       if (bSide !== c.spec.side) continue;
       localCount++;
-      const dist = bPos.distanceTo(cPos);
+      const dx = b.x - c.cPos.x;
+      const dy = b.y - c.cPos.y;
+      const dz = b.z - c.cPos.z;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
       const proximity = dist <= c.spec.influenceRadius ? (1.25 - dist / c.spec.influenceRadius) : 0.35;
       const housePower = 1 + (b.storedTokens || 0) * 0.45 + ((b.tier || 1) - 1) * 1.2;
       score += proximity * housePower;
     }
 
     const globalGrowth = 1 + Math.min(1.6, totalBuildings * 0.08 + localCount * 0.14 + score * 0.06);
-    c.growthScale += (globalGrowth - c.growthScale) * 0.12;
+    c.growthScale += (globalGrowth - c.growthScale) * 0.18;
     c.group.scale.setScalar(c.growthScale);
 
     const targetBoost = Math.min(110, score * 9.5 + localCount * 4.0);
-    c.elevationBoost += (targetBoost - c.elevationBoost) * 0.12;
+    c.elevationBoost += (targetBoost - c.elevationBoost) * 0.18;
     c.group.position.copy(c.dir).multiplyScalar(c.baseR + c.spec.side * c.elevationBoost);
   }
 }
@@ -1030,6 +1405,10 @@ function computePlacementOnPlayerSide(aimPoint){
   const playerSide = player.position.length() < PLANET_RADIUS ? -1 : 1;
   let dir = aimPoint.length() > 0.001 ? aimPoint.clone().normalize() : new THREE.Vector3(0, 1, 0);
 
+  if (sampleTerrainAtDir(dir).isPassThrough){
+    return null;
+  }
+
   let anchorBuilding = null;
   let bestAnchorDist = 26;
   for (const b of buildings){
@@ -1053,18 +1432,20 @@ function computePlacementOnPlayerSide(aimPoint){
       tangent.normalize();
       const rotAxis = new THREE.Vector3().crossVectors(aDir, tangent).normalize();
       const midDir = aDir.clone().applyAxisAngle(rotAxis, 11 / PLANET_RADIUS).normalize();
-      const midSupportR = getSurfaceSupportRadius(midDir, playerSide);
-      const bridgeOffset = Math.max(0, midSupportR - PLANET_RADIUS);
-      const bridgeBase = midDir.clone().multiplyScalar(PLANET_RADIUS + playerSide * bridgeOffset);
-      const candCenter = bridgeBase.clone().addScaledVector(aUp, 3.5);
-      if (!doesOverlapExistingBuilding(candCenter, 6.5)){
-        return {
-          basePos: bridgeBase,
-          side: playerSide,
-          tier: (anchorBuilding.tier || 1) + 1,
-          isBridge: true,
-          bridgeAxis: [tangent.x, tangent.y, tangent.z]
-        };
+      if (!sampleTerrainAtDir(midDir).isPassThrough){
+        const midSupportR = getSurfaceSupportRadius(midDir, playerSide);
+        const bridgeOffset = Math.max(0, midSupportR - PLANET_RADIUS);
+        const bridgeBase = midDir.clone().multiplyScalar(PLANET_RADIUS + playerSide * bridgeOffset);
+        const candCenter = bridgeBase.clone().addScaledVector(aUp, 3.5);
+        if (!doesOverlapExistingBuilding(candCenter, 6.5)){
+          return {
+            basePos: bridgeBase,
+            side: playerSide,
+            tier: (anchorBuilding.tier || 1) + 1,
+            isBridge: true,
+            bridgeAxis: [tangent.x, tangent.y, tangent.z]
+          };
+        }
       }
     }
   }
@@ -1096,7 +1477,9 @@ function computePlacementOnPlayerSide(aimPoint){
     const rotAxis = new THREE.Vector3(0, 1, 0).cross(dir);
     if (rotAxis.lengthSq() < 1e-4) rotAxis.set(1, 0, 0);
     rotAxis.normalize();
-    dir.applyAxisAngle(rotAxis, 0.008 * attempt).normalize();
+    const nextDir = dir.clone().applyAxisAngle(rotAxis, 0.008 * attempt).normalize();
+    if (sampleTerrainAtDir(nextDir).isPassThrough) continue;
+    dir = nextDir;
     const rTry = Math.max(0, getSurfaceSupportRadius(dir, playerSide) - PLANET_RADIUS);
     basePos = dir.clone().multiplyScalar(PLANET_RADIUS + playerSide * rTry);
     candCenter = basePos.clone().addScaledVector(dir.clone().multiplyScalar(playerSide), 4.5);
@@ -1127,25 +1510,102 @@ const backgroundPlanets = [];
 });
 
 /* =========================================================
-   MQTT MULTIPLAYER, CHAT & FLYING PLAYER HACKING
+   MQTT MULTIPLAYER, GLASSY PEER SUBJECTS + HORIZONTAL NEON NAMES
    ========================================================= */
 const BROKER = 'wss://broker.emqx.io:8084/mqtt';
 const TOPIC = 'outside_in_planet/megacity/v1';
 let mqttClient = null;
 const remotePeers = new Map();
-const remotePeerGeo = new THREE.OctahedronGeometry(3.5, 0);
 let activeRemoteAttacks = {};
 
-function getOrCreateRemotePeer(id){
-  if (remotePeers.has(id)) return remotePeers.get(id);
-  const mesh = new THREE.Mesh(
-    remotePeerGeo,
-    new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.45 })
+function createPeerSubjectGroup(labelText){
+  const group = new THREE.Group();
+
+  const coreMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(1.15, 16, 14),
+    new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.75,
+      roughness: 0.25,
+      metalness: 0.2
+    })
   );
-  scene.add(mesh);
-  const entry = { mesh, lastSeen: Date.now() };
+  group.add(coreMesh);
+
+  const stemMesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.12, 0.12, 2.2, 10),
+    new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.35, metalness: 0.7 })
+  );
+  stemMesh.position.set(0, -1.1, 0);
+  const weightMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.45, 12, 10),
+    new THREE.MeshStandardMaterial({ color: 0x7dd3fc, emissive: 0x0ea5e9, emissiveIntensity: 0.5 })
+  );
+  weightMesh.position.set(0, -2.2, 0);
+  group.add(stemMesh, weightMesh);
+
+  const glassShell = new THREE.Mesh(
+    new THREE.SphereGeometry(3.3, 24, 18),
+    new THREE.MeshPhysicalMaterial({
+      color: 0xdbeafe,
+      transparent: true,
+      opacity: 0.34,
+      roughness: 0.08,
+      metalness: 0.05,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.06,
+      depthWrite: false
+    })
+  );
+  group.add(glassShell);
+
+  const tagEl = document.createElement('div');
+  tagEl.className = 'peer-neon-tag';
+  tagEl.textContent = labelText;
+  peerLabelsLayer.appendChild(tagEl);
+
+  return { group, tagEl };
+}
+
+function getOrCreateRemotePeer(id){
+  if (remotePeers.has(id)){
+    const existing = remotePeers.get(id);
+    if (existing.tagEl.textContent !== id) existing.tagEl.textContent = id;
+    return existing;
+  }
+  const { group, tagEl } = createPeerSubjectGroup(id);
+  scene.add(group);
+  const entry = { mesh: group, tagEl, lastSeen: Date.now() };
   remotePeers.set(id, entry);
   return entry;
+}
+
+function updatePeerLabelsScreenPosition(){
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const anchorWorld = new THREE.Vector3();
+
+  for (const entry of remotePeers.values()){
+    anchorWorld.copy(entry.mesh.position);
+    const r = anchorWorld.length();
+    if (r > 0.001){
+      anchorWorld.addScaledVector(anchorWorld.clone().normalize(), 4.2);
+    } else {
+      anchorWorld.y += 4.2;
+    }
+
+    const projected = anchorWorld.clone().project(camera);
+    const visible = projected.z >= -1 && projected.z <= 1;
+    if (!visible){
+      entry.tagEl.style.display = 'none';
+      continue;
+    }
+    const sx = (projected.x * 0.5 + 0.5) * w;
+    const sy = (-projected.y * 0.5 + 0.5) * h;
+    entry.tagEl.style.display = 'block';
+    entry.tagEl.style.transform = `translate3d(${sx.toFixed(1)}px, ${sy.toFixed(1)}px, 0) translate(-50%, -100%) rotate(0deg)`;
+  }
 }
 
 function updatePresenceUI(){
@@ -1153,6 +1613,7 @@ function updatePresenceUI(){
   for (const [id, entry] of remotePeers.entries()){
     if (now - entry.lastSeen > 12000){
       scene.remove(entry.mesh);
+      if (entry.tagEl && entry.tagEl.parentNode) entry.tagEl.parentNode.removeChild(entry.tagEl);
       remotePeers.delete(id);
     }
   }
@@ -1443,6 +1904,12 @@ function startSelectedAction(){
     freezeCooldownUntil = Date.now() + 7500;
   } else {
     if (tokens < 1) return;
+    const placed = computePlacementOnPlayerSide(aimPt);
+    if (!placed){
+      appendChatLine('System', 'Cannot build on a pass-through zone');
+      return;
+    }
+
     holdMode = 'build';
     targetBuildingId = null;
     lastDepositStep = 0;
@@ -1452,7 +1919,6 @@ function startSelectedAction(){
 
     recordTokenDelta(-1, 'Build house', true);
 
-    const placed = computePlacementOnPlayerSide(aimPt);
     const newB = {
       id: 'b_' + Date.now() + '_' + Math.random().toString(16).slice(2, 6),
       owner: myPeerId,
@@ -1822,16 +2288,17 @@ document.getElementById('closeHelpBtn').addEventListener('click', () => helpModa
 
 /* =========================================================
    FLIGHT PHYSICS: LINEAR SPEED, ZERO GRAVITY AT CENTER &
-   MATCHING OUTER HEIGHT, UNBOUNDED FREE FLIGHT IN ANY DIRECTION
+   MATCHING OUTER HEIGHT, WATER DENSITY & SOLID TERRAIN
    ========================================================= */
 let velocity = new THREE.Vector3(0, 0, 0);
 let angularVelocityX = 0;
 let angularVelocityZ = 0;
 const clock = new THREE.Clock();
+let elapsedTimeSec = 0;
 
 const OUTER_ZERO_GRAVITY_RADIUS = PLANET_RADIUS + 1200;
 
-function computeGravity(pos){
+function computeGravity(pos, inWater = false){
   const r = pos.length();
   if (r < 0.001) return new THREE.Vector3(0, 0, 0);
   if (r >= OUTER_ZERO_GRAVITY_RADIUS) return new THREE.Vector3(0, 0, 0);
@@ -1839,8 +2306,31 @@ function computeGravity(pos){
   const dir = pos.clone().normalize();
   const innerZeroMask = THREE.MathUtils.smoothstep(r, 0, 260);
   const outerZeroMask = 1.0 - THREE.MathUtils.smoothstep(r, OUTER_ZERO_GRAVITY_RADIUS - 320, OUTER_ZERO_GRAVITY_RADIUS);
-  const g = GRAVITY * innerZeroMask * outerZeroMask;
+  const waterScale = inWater ? WATER_GRAVITY_FACTOR : 1.0;
+  const g = GRAVITY * innerZeroMask * outerZeroMask * waterScale;
   return r < PLANET_RADIUS ? dir.multiplyScalar(g) : dir.multiplyScalar(-g);
+}
+
+function applyPendulumSelfLeveling(hasControlInput){
+  const r = player.position.length();
+  const localDown = r > 0.001
+    ? player.position.clone().normalize().negate()
+    : new THREE.Vector3(0, -1, 0);
+
+  /* Keep pendulum counterweight lever oriented toward local down */
+  const worldDownInPlayer = localDown.clone().applyQuaternion(player.quaternion.clone().invert()).normalize();
+  pendulumPivot.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), worldDownInPlayer);
+
+  /* Very gentle leveling when there is no control input */
+  if (!hasControlInput){
+    const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(player.quaternion).normalize();
+    const targetUp = localDown.clone().negate();
+    const alignQuat = new THREE.Quaternion().setFromUnitVectors(currentUp, targetUp);
+    const stepQuat = new THREE.Quaternion().slerp(alignQuat, 0.0022);
+    player.quaternion.premultiply(stepQuat);
+    angularVelocityX *= 0.985;
+    angularVelocityZ *= 0.985;
+  }
 }
 
 function updateHoldActions(nowMs){
@@ -1895,18 +2385,25 @@ function updateHoldActions(nowMs){
 
 function animate(){
   requestAnimationFrame(animate);
-  clock.getDelta();
+  const dt = Math.min(0.05, clock.getDelta());
+  elapsedTimeSec += dt;
+  waterTimeUniform.value += dt;
+  updateDriftingExteriorLights(elapsedTimeSec);
+
   const nowMs = performance.now();
+  const inWater = isInWaterLayer(player.position);
+  let hasControlInput = false;
 
   if (Date.now() >= frozenUntil){
-    if (keys['ArrowLeft']) angularVelocityZ -= TURN_SPEED;
-    if (keys['ArrowRight']) angularVelocityZ += TURN_SPEED;
-    if (keys['ArrowUp']) angularVelocityX -= TURN_SPEED;
-    if (keys['ArrowDown']) angularVelocityX += TURN_SPEED;
+    if (keys['ArrowLeft']){ angularVelocityZ -= TURN_SPEED; hasControlInput = true; }
+    if (keys['ArrowRight']){ angularVelocityZ += TURN_SPEED; hasControlInput = true; }
+    if (keys['ArrowUp']){ angularVelocityX -= TURN_SPEED; hasControlInput = true; }
+    if (keys['ArrowDown']){ angularVelocityX += TURN_SPEED; hasControlInput = true; }
 
-    if (touchJoystick.active){
+    if (touchJoystick.active && (Math.abs(touchJoystick.moveX) > 0.02 || Math.abs(touchJoystick.moveY) > 0.02)){
       angularVelocityX += touchJoystick.moveY * TOUCH_TURN_SPEED;
       angularVelocityZ += touchJoystick.moveX * TOUCH_TURN_SPEED;
+      hasControlInput = true;
     }
 
     angularVelocityX *= DAMPING_TURN;
@@ -1917,13 +2414,17 @@ function animate(){
     );
     player.quaternion.multiply(deltaQuaternion);
 
+    const thrustScale = inWater ? WATER_THRUST_FACTOR : 1.0;
     let signedThrust = 0;
     if (keys['Space']){
-      signedThrust = FLY_SPEED * (superThrust ? 2.0 : 1.0);
+      signedThrust = FLY_SPEED * (superThrust ? 2.0 : 1.0) * thrustScale;
+      hasControlInput = true;
     } else if (keys['KeyB']){
-      signedThrust = -FLY_SPEED * (superThrust ? 2.0 : 1.0);
+      signedThrust = -FLY_SPEED * (superThrust ? 2.0 : 1.0) * thrustScale;
+      hasControlInput = true;
     } else if (Math.abs(currentThrottle) > 0.02){
-      signedThrust = FLY_SPEED * currentThrottle;
+      signedThrust = FLY_SPEED * currentThrottle * thrustScale;
+      hasControlInput = true;
     }
 
     const localUp = new THREE.Vector3(0, 1, 0).applyQuaternion(player.quaternion);
@@ -1937,9 +2438,22 @@ function animate(){
     angularVelocityZ *= 0.85;
   }
 
-  velocity.add(computeGravity(player.position));
-  velocity.multiplyScalar(DAMPING_MOVE);
+  applyPendulumSelfLeveling(hasControlInput);
+
+  velocity.add(computeGravity(player.position, inWater));
+  velocity.multiplyScalar(inWater ? WATER_DAMPING_MOVE : DAMPING_MOVE);
   player.position.add(velocity);
+  resolveSolidTerrainCollision(player.position, velocity, 0.5);
+
+  /* Invisible guard shell around camera focus so camera focus never enters solid terrain */
+  player.updateMatrixWorld();
+  camera.updateMatrixWorld();
+  const camWorldPos = camera.getWorldPosition(new THREE.Vector3());
+  const beforeGuardPos = camWorldPos.clone();
+  guardCameraFocusAgainstTerrain(camWorldPos);
+  if (camWorldPos.distanceToSquared(beforeGuardPos) > 1e-8){
+    player.position.add(camWorldPos.sub(beforeGuardPos));
+  }
 
   for (const item of animatedGyroParts){
     item.obj.rotation.z += item.speed;
@@ -1954,8 +2468,9 @@ function animate(){
   }
 
   updateRouteRingsFade(nowMs);
-  updateCentersInfluence();
+  updateCentersInfluence(nowMs);
   updateHoldActions(nowMs);
+  updatePeerLabelsScreenPosition();
 
   backgroundPlanets.forEach(planet => {
     planet.mesh.rotation.y += planet.rotSpeed;
