@@ -364,7 +364,7 @@ canvas#statsChart:active{cursor:grabbing}
     <p><strong>Desktop Controls:</strong> Use Arrow keys (<code>←</code> <code>↑</code> <code>↓</code> <code>→</code>) or hold left mouse button and drag to tilt; hold <code>Space</code> for forward thrust (double-tap <code>Space</code> for boost) or <code>B</code> for reverse thrust.</p>
     <p><strong>Reticle &amp; Modes:</strong> Drag the crosshair to aim. <strong>Tap</strong> the crosshair to open or close the mode menu (<code>Build</code>, <code>Attack</code>, <code>Hack</code>), select a mode, and <strong>long-press</strong> the crosshair (or hold/press <code>F</code>) to activate it.</p>
     <p><strong>Free Flight &amp; Gravity:</strong> Fly in any direction indefinitely. Gravity is zero at the planet center and zero at the matching outer height.</p>
-    <p><strong>Water, Terrain &amp; Pass-Through Zones:</strong> The transparent shimmering water zone slows thrust, gravity, and momentum. Solid terrain is opaque and impassable without surface movement, with pass-through openings and a pendulum self-leveling lever and camera guard shell.</p>
+    <p><strong>Water, Terrain &amp; Pass-Through Zones:</strong> The transparent shimmering water zone slows thrust, gravity, and momentum. Solid terrain is opaque and impassable without surface movement, with pass-through openings and a camera guard shell.</p>
     <p><strong>Houses, Roofs &amp; Bridges:</strong> Buildings place on your current side without overlapping, feature roof accents matching the nearest sector center, and can span horizontally as arches or bridges when anchored to another building wall.</p>
     <p><strong>Hack Houses &amp; Flyers:</strong> Hack stored tokens from other players' buildings or hack nearby players mid-flight.</p>
     <div class="help-footer-logo">
@@ -610,25 +610,24 @@ player.add(camera);
 /* Invisible protective guard shell around camera focus so focus never enters solid terrain */
 const cameraGuardShellRadius = 2.6;
 
-/* Pendulum counterweight lever (груз на ножке-рычаге) for slow self-leveling & support */
-const pendulumPivot = new THREE.Group();
-const pendulumStem = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.025, 0.025, 1.35, 8),
-  new THREE.MeshBasicMaterial({ color: 0x94a3b8, transparent: true, opacity: 0.35 })
-);
-pendulumStem.position.set(0, -0.675, 0);
-const pendulumWeight = new THREE.Mesh(
-  new THREE.SphereGeometry(0.13, 12, 10),
-  new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.55 })
-);
-pendulumWeight.position.set(0, -1.35, 0);
-pendulumPivot.add(pendulumStem, pendulumWeight);
-player.add(pendulumPivot);
-
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 document.body.appendChild(renderer.domElement);
+
+/* Environment map so reflective shells reflect scene light cleanly */
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+const envScene = new THREE.Scene();
+envScene.background = new THREE.Color(0x0a0a12);
+const envLightA = new THREE.PointLight(0xfff4d6, 12, 50);
+envLightA.position.set(8, 10, 6);
+const envLightB = new THREE.PointLight(0x7dd3fc, 10, 50);
+envLightB.position.set(-8, -6, 5);
+const envLightC = new THREE.PointLight(0xf472b6, 8, 50);
+envLightC.position.set(0, -10, -8);
+envScene.add(envLightA, envLightB, envLightC);
+scene.environment = pmremGenerator.fromScene(envScene, 0.02).texture;
+pmremGenerator.dispose();
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -694,13 +693,11 @@ const _tmpCamPos = new THREE.Vector3();
 const _tmpCamDir = new THREE.Vector3();
 
 function isLightOccludedByPlanet(lightDir, camPos){
-  /* If light is on the far hemisphere relative to camera and planet body is between them */
   const camR = camPos.length();
   if (camR < 0.001) return false;
   _tmpCamDir.copy(camPos).divideScalar(camR);
   const cosAngle = lightDir.dot(_tmpCamDir);
   if (cosAngle > 0.25) return false;
-  /* Occluded if camera is inside/near planet and looking away from light direction, or light is behind planet limb */
   const sinLight = Math.sqrt(Math.max(0, 1 - cosAngle * cosAngle));
   const limbCos = Math.min(1, PLANET_RADIUS / Math.max(PLANET_RADIUS + 1, camR));
   return cosAngle < -limbCos * 0.65 && sinLight < 0.85;
@@ -831,10 +828,10 @@ function createRefractiveWaterMaterial(baseOpacity, timeUniform){
         float dist = length(vWorldPosition - cameraPosition);
         float farFade = 1.0 - smoothstep(260.0, 2600.0, dist);
 
-        vec3 deepWater = vec3(0.03, 0.14, 0.26);
-        vec3 refractedTint = vec3(0.08, 0.44, 0.68) + refractDir * 0.06;
-        vec3 iridescence = mix(refractedTint, vec3(0.35, 0.8, 0.95), shimmer * 0.55);
-        vec3 col = mix(deepWater, iridescence, 0.45 + fresnel * 0.45) + vec3(0.4, 0.78, 0.96) * caustic * 0.26;
+        vec3 deepWater = vec3(0.015, 0.08, 0.34);
+        vec3 refractedTint = vec3(0.04, 0.30, 0.82) + refractDir * 0.06;
+        vec3 iridescence = mix(refractedTint, vec3(0.18, 0.62, 0.98), shimmer * 0.45);
+        vec3 col = mix(deepWater, iridescence, 0.42 + fresnel * 0.42) + vec3(0.22, 0.62, 1.0) * caustic * 0.24;
 
         float alpha = clamp((uBaseOpacity * 0.42 + fresnel * 0.24 + caustic * 0.14) * farFade, 0.015, 0.38);
         if (alpha < 0.006) discard;
@@ -971,7 +968,6 @@ function resolveSolidTerrainCollision(pos, vel, clearance = 0.45){
     } else {
       pos.copy(dir).multiplyScalar(paddedInner);
     }
-    /* No surface movement along solid terrain: zero velocity on contact */
     vel.set(0, 0, 0);
     return true;
   }
@@ -1510,19 +1506,20 @@ const backgroundPlanets = [];
 });
 
 /* =========================================================
-   MQTT MULTIPLAYER, GLASSY PEER SUBJECTS + HORIZONTAL NEON NAMES
+   MQTT MULTIPLAYER, CRYSTAL REFLECTIVE PEER SHELL + HORIZONTAL NEON NAMES
    ========================================================= */
 const BROKER = 'wss://broker.emqx.io:8084/mqtt';
 const TOPIC = 'outside_in_planet/megacity/v1';
 let mqttClient = null;
 const remotePeers = new Map();
 let activeRemoteAttacks = {};
+let hasMovedFromOrigin = false;
 
 function createPeerSubjectGroup(labelText){
   const group = new THREE.Group();
 
   const coreMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(1.15, 16, 14),
+    new THREE.SphereGeometry(1.15, 24, 18),
     new THREE.MeshStandardMaterial({
       color: 0x38bdf8,
       emissive: 0x0284c7,
@@ -1533,28 +1530,17 @@ function createPeerSubjectGroup(labelText){
   );
   group.add(coreMesh);
 
-  const stemMesh = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.12, 0.12, 2.2, 10),
-    new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.35, metalness: 0.7 })
-  );
-  stemMesh.position.set(0, -1.1, 0);
-  const weightMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(0.45, 12, 10),
-    new THREE.MeshStandardMaterial({ color: 0x7dd3fc, emissive: 0x0ea5e9, emissiveIntensity: 0.5 })
-  );
-  weightMesh.position.set(0, -2.2, 0);
-  group.add(stemMesh, weightMesh);
-
   const glassShell = new THREE.Mesh(
-    new THREE.SphereGeometry(3.3, 24, 18),
+    new THREE.SphereGeometry(3.3, 48, 36),
     new THREE.MeshPhysicalMaterial({
-      color: 0xdbeafe,
+      color: 0xffffff,
       transparent: true,
-      opacity: 0.34,
-      roughness: 0.08,
-      metalness: 0.05,
+      opacity: 0.01,
+      roughness: 0.0,
+      metalness: 0.1,
       clearcoat: 1.0,
-      clearcoatRoughness: 0.06,
+      clearcoatRoughness: 0.0,
+      envMapIntensity: 2.2,
       depthWrite: false
     })
   );
@@ -1648,12 +1634,14 @@ try{
   mqttClient = mqtt.connect(BROKER, { clientId, reconnectPeriod: 4000, connectTimeout: 5000, keepalive: 60 });
   mqttClient.on('connect', () => {
     mqttClient.subscribe(TOPIC, { qos: 0 });
-    publishMqtt({ type: 'STATE', pos: [player.position.x, player.position.y, player.position.z] });
+    if (hasMovedFromOrigin && player.position.lengthSq() > 0.01){
+      publishMqtt({ type: 'STATE', pos: [player.position.x, player.position.y, player.position.z] });
+    }
   });
   mqttClient.on('message', (_, raw) => {
     let data;
     try{ data = JSON.parse(raw.toString()); }catch{ return; }
-    if (data.sid === clientId) return;
+    if (data.sid === clientId || (data.sender && data.sender === myPeerId)) return;
 
     if (data.type === 'STATE' && Array.isArray(data.pos) && data.pos.length === 3){
       const entry = getOrCreateRemotePeer(data.sender || 'Peer');
@@ -1698,10 +1686,12 @@ try{
 }catch{}
 
 setInterval(() => {
-  publishMqtt({
-    type: 'STATE',
-    pos: [Number(player.position.x.toFixed(2)), Number(player.position.y.toFixed(2)), Number(player.position.z.toFixed(2))]
-  });
+  if (hasMovedFromOrigin && player.position.lengthSq() > 0.01){
+    publishMqtt({
+      type: 'STATE',
+      pos: [Number(player.position.x.toFixed(2)), Number(player.position.y.toFixed(2)), Number(player.position.z.toFixed(2))]
+    });
+  }
   updatePresenceUI();
 }, 1500);
 
@@ -2317,11 +2307,6 @@ function applyPendulumSelfLeveling(hasControlInput){
     ? player.position.clone().normalize().negate()
     : new THREE.Vector3(0, -1, 0);
 
-  /* Keep pendulum counterweight lever oriented toward local down */
-  const worldDownInPlayer = localDown.clone().applyQuaternion(player.quaternion.clone().invert()).normalize();
-  pendulumPivot.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), worldDownInPlayer);
-
-  /* Very gentle leveling when there is no control input */
   if (!hasControlInput){
     const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(player.quaternion).normalize();
     const targetUp = localDown.clone().negate();
@@ -2444,6 +2429,10 @@ function animate(){
   velocity.multiplyScalar(inWater ? WATER_DAMPING_MOVE : DAMPING_MOVE);
   player.position.add(velocity);
   resolveSolidTerrainCollision(player.position, velocity, 0.5);
+
+  if (player.position.lengthSq() > 0.25){
+    hasMovedFromOrigin = true;
+  }
 
   /* Invisible guard shell around camera focus so camera focus never enters solid terrain */
   player.updateMatrixWorld();
