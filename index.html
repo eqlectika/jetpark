@@ -417,10 +417,10 @@ const TOUCH_TURN_SPEED = 0.0005;
 const GRAVITY = 0.0043333;
 const DAMPING_TURN = 0.99;
 const DAMPING_MOVE = 0.99;
-const PLANET_RADIUS = 1500;
+const PLANET_RADIUS = 2100;
 const PLANET_SHELL_THICKNESS = 18;
-const WATER_OUTER_OFFSET = 14;
-const WATER_INNER_OFFSET = 14;
+const WATER_OUTER_OFFSET = 16;
+const WATER_INNER_OFFSET = 200;
 const WATER_THRUST_FACTOR = 0.55;
 const WATER_GRAVITY_FACTOR = 0.6;
 const WATER_DAMPING_MOVE = 0.945;
@@ -435,8 +435,7 @@ const store = {
     const key = 'oip_' + k;
     try{
       const v = localStorage.getItem(key);
-      if (v !== null) return JSON.parse(v);
-    }catch{}
+      if (v !== null) return JSON.parse(v);     }catch{}
     return Object.prototype.hasOwnProperty.call(memoryStore, key) ? memoryStore[key] : fb;
   },
   set(k, v){
@@ -905,9 +904,8 @@ function sampleTerrainAtDir(dir){
   }
   const windowRadiusRad = 0.24;
 
-const surface1R = PLANET_RADIUS + Math.max(4, 10 + (landmass * 16.0) + (ridgeB * 7.0));
-  const surface2R = Math.max(10, PLANET_RADIUS - Math.max(4, 10 - (-landmass * 15.0) - (ridgeA * 6.0)));
-
+const surface1R = PLANET_RADIUS + Math.max(6, 18 + (landmass * 34.0) + (ridgeB * 14.0));
+const surface2R = Math.max(10, PLANET_RADIUS - Math.max(6, 18 - (-landmass * 32.0) - (ridgeA * 12.0)));
   const vol1 = Math.max(0, surface1R - PLANET_RADIUS);
   const vol2 = Math.max(0, PLANET_RADIUS - surface2R);
   const s1Larger = vol1 >= vol2;
@@ -980,7 +978,7 @@ solidTerrainMat.onBeforeCompile = (shader) => {
        vCutWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`
     );
 
-  shader.fragmentShader = shader.fragmentShader
+shader.fragmentShader = shader.fragmentShader
     .replace(
       '#include <common>',
       `#include <common>
@@ -994,16 +992,32 @@ solidTerrainMat.onBeforeCompile = (shader) => {
        float ridgeB = sin(n.y * 8.0 - n.z * 6.0) * 0.5;
        float landmass = ridgeA + ridgeB;
 
-       float surface1R = 1500.0 + max(4.0, 10.0 + (landmass * 16.0) + (ridgeB * 7.0));
-       float surface2R = max(10.0, 1500.0 - max(4.0, 10.0 - (-landmass * 15.0) - (ridgeA * 6.0)));
-       float vol1 = max(0.0, surface1R - 1500.0);
-       float vol2 = max(0.0, 1500.0 - surface2R);
+float surface1R = 1500.0 + max(6.0, 18.0 + (landmass * 34.0) + (ridgeB * 14.0));
+float surface2R = max(10.0, 2100.0 - max(6.0, 18.0 - (-landmass * 32.0) - (ridgeA * 12.0)));       float vol1 = max(0.0, surface1R - 1500.0);
+       float vol2 = max(0.0, 2100.0 - surface2R);
        bool s1Larger = vol1 >= vol2;
 
        bool isIntersectionOfSurfaces = abs(surface1R - surface2R) < 22.0;
        bool cutSmallerSide = isIntersectionOfSurfaces && (s1Larger ? (vol2 < vol1 * 0.95) : (vol1 < vol2 * 0.95));
 
        if (landmass < -0.35 || cutSmallerSide) discard;`
+    )
+    .replace(
+      '#include <dithering_fragment>',
+      `float rPos = length(vCutWorldPos);
+       float aboveMask = smoothstep(1512.0, 1516.0, rPos);
+       float belowMask = 1.0 - smoothstep(1484.0, 1488.0, rPos);
+
+       float softGrain = 0.96 + 0.04 * sin(vCutWorldPos.x * 0.25) * cos(vCutWorldPos.z * 0.25);
+
+       vec3 aboveLand = vec3(0.46, 0.39, 0.30) * softGrain;
+       vec3 belowLand = vec3(0.05, 0.13, 0.24) * softGrain;
+       vec3 midBand   = vec3(0.14, 0.26, 0.40) * softGrain;
+
+       vec3 targetCol = mix(midBand, aboveLand, aboveMask);
+       targetCol = mix(targetCol, belowLand, belowMask);
+       gl_FragColor.rgb = mix(gl_FragColor.rgb, targetCol, 0.55);
+       #include <dithering_fragment>`
     );
 };
 
