@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head> 
+<head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <link rel="icon" type="image/png" sizes="512x512" href="jetpark.PNG">
@@ -9,11 +9,14 @@
 <title>Outside-in Jetpack | Mint & Build</title>
 <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+:root{
+  --app-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;font-family:var(--app-font)}
 html,body{
   width:100dvw;height:100dvh;overflow:hidden;
   touch-action:none;-ms-touch-action:none;background:#0a0a12;color:#eef2ff;
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  font-family:var(--app-font);
 }
 canvas{
   display:block;position:fixed;inset:0;width:100%;height:100%;z-index:1;touch-action:none;
@@ -181,7 +184,7 @@ canvas#statsChart{
 }
 canvas#statsChart:active{cursor:grabbing}
 .section-label{font-size:12px;font-weight:700;color:#94a3b8;margin-bottom:6px;display:block}
-.transfer-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.transfer-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px}
 .transfer-row input,.transfer-row select{
   background:#070a14;border:1px solid #334155;color:#fff;border-radius:6px;padding:6px 8px;font-size:13px;
   user-select:text;-webkit-user-select:text;
@@ -203,6 +206,8 @@ canvas#statsChart:active{cursor:grabbing}
 }
 .hist-item:last-child{border-bottom:none}
 .hist-item.sel{background:rgba(220,38,38,.16)}
+.hist-amount.in{color:#4ade80;font-weight:600}
+.hist-amount.out{color:#f87171;font-weight:600}
 .buildings-box{
   flex:1;min-height:120px;overflow-y:auto;background:#070a14;border:1px solid #1e293b;
   border-radius:8px;padding:8px;font-size:12px;color:#cbd5e1;
@@ -304,12 +309,13 @@ canvas#statsChart:active{cursor:grabbing}
     <div class="transfer-row">
       <select id="recipientSelect" title="To Peer"></select>
       <input id="recipientCustom" type="text" placeholder="To Peer-XXXX" style="width:130px">
-      <input id="transferAmount" type="number" min="1" step="1" value="5" style="width:80px">
-      <button class="act-btn" id="sendTokensBtn">Send</button>
+      <input id="transferAmount" type="number" min="1" step="any" value="5" style="width:84px">
+      <button class="act-btn secondary" type="button" id="maxTransferBtn">Max</button>
+      <button class="act-btn" type="button" id="sendTokensBtn">Send</button>
     </div>
 
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-      <strong style="font-size:13px">Expense History</strong>
+      <strong style="font-size:13px">Transaction History</strong>
       <div style="display:flex;gap:6px">
         <button class="act-btn secondary" id="selectAllHistBtn">Select All</button>
         <button class="act-btn danger" id="deleteSelectedHistBtn" disabled>Delete Selected</button>
@@ -437,15 +443,19 @@ function saveEconomy(){
 function recordTokenDelta(delta, reason, isExpense = false){
   const numDelta = Number(delta);
   if (!Number.isFinite(numDelta)) return;
+  const prevTokens = tokens;
   tokens = Math.max(0, Number((tokens + numDelta).toFixed(2)));
+  const actualDelta = Number((tokens - prevTokens).toFixed(2));
   tokenSeries.push({ t: Date.now(), val: tokens });
-  if (isExpense || numDelta < 0){
-    const absAmt = Number(Math.abs(numDelta).toFixed(2));
+  if (actualDelta !== 0 || isExpense){
+    const signedAmt = actualDelta !== 0 ? actualDelta : (isExpense ? -Math.abs(numDelta) : numDelta);
+    const absAmt = Number(Math.abs(signedAmt).toFixed(2));
     if (absAmt > 0){
       expenseHistory.unshift({
         id: 'exp_' + Date.now() + '_' + Math.random().toString(16).slice(2, 6),
-        reason: reason || 'Expense',
+        reason: reason || (signedAmt >= 0 ? 'Incoming' : 'Expense'),
         amount: absAmt,
+        direction: signedAmt >= 0 ? 'in' : 'out',
         ts: Date.now()
       });
     }
@@ -1544,12 +1554,16 @@ const statsCard = statsModal.querySelector('.modal-card');
 const statsChartEl = document.getElementById('statsChart');
 const timeframeBar = document.getElementById('timeframeBar');
 const recipientSelect = document.getElementById('recipientSelect');
+const transferAmountInput = document.getElementById('transferAmount');
+const maxTransferBtn = document.getElementById('maxTransferBtn');
 const expenseHistoryList = document.getElementById('expenseHistoryList');
 const deleteSelectedHistBtn = document.getElementById('deleteSelectedHistBtn');
 const selectAllHistBtn = document.getElementById('selectAllHistBtn');
 const builtCountEl = document.getElementById('builtCountEl');
 const builtHousesList = document.getElementById('builtHousesList');
 const withdrawAllBtn = document.getElementById('withdrawAllBtn');
+
+const CANVAS_FONT_STACK = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
 function syncTimeframeUI(){
   timeframeBar.querySelectorAll('.tf-btn').forEach(btn => {
@@ -1605,8 +1619,21 @@ statsChartEl.addEventListener('pointercancel', stopChartScroll);
 
 function drawChart(){
   const canvas = statsChartEl;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cssW = Math.max(240, canvas.clientWidth || 620);
+  const cssH = 150;
+  const targetW = Math.round(cssW * dpr);
+  const targetH = Math.round(cssH * dpr);
+  if (canvas.width !== targetW || canvas.height !== targetH){
+    canvas.width = targetW;
+    canvas.height = targetH;
+  }
+
   const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+
   const pts = getFilteredSeries();
   const maxV = Math.max(10, ...pts.map(p => p.val));
   const minV = Math.min(0, ...pts.map(p => p.val));
@@ -1616,16 +1643,17 @@ function drawChart(){
   ctx.lineWidth = 2.5;
   ctx.beginPath();
   pts.forEach((p, idx) => {
-    const x = pts.length === 1 ? canvas.width / 2 : (idx / (pts.length - 1)) * (canvas.width - 36) + 18;
-    const y = canvas.height - 20 - ((p.val - minV) / span) * (canvas.height - 40);
+    const x = pts.length === 1 ? cssW / 2 : (idx / (pts.length - 1)) * (cssW - 36) + 18;
+    const y = cssH - 20 - ((p.val - minV) / span) * (cssH - 40);
     if (idx === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
   ctx.stroke();
 
   ctx.fillStyle = '#94a3b8';
-  ctx.font = '12px sans-serif';
+  ctx.font = `12px ${CANVAS_FONT_STACK}`;
   ctx.fillText(`[${selectedTimeframe.toUpperCase()}] Balance: ${tokens.toFixed(1)} | Peak: ${maxV.toFixed(1)}`, 14, 18);
+  ctx.restore();
 }
 
 function syncDeleteButtonState(){
@@ -1638,7 +1666,7 @@ function syncDeleteButtonState(){
 function renderExpenseHistory(){
   expenseHistoryList.innerHTML = '';
   if (!expenseHistory.length){
-    expenseHistoryList.innerHTML = '<div style="padding:10px;color:#64748b;font-size:12px">No expenses yet</div>';
+    expenseHistoryList.innerHTML = '<div style="padding:10px;color:#64748b;font-size:12px">No transactions yet</div>';
     selectedExpenseIds.clear();
     syncDeleteButtonState();
     return;
@@ -1655,10 +1683,17 @@ function renderExpenseHistory(){
       row.classList.toggle('sel', cb.checked);
       syncDeleteButtonState();
     });
+    const isIncoming = item.direction === 'in';
+    const amtSpan = document.createElement('span');
+    amtSpan.className = 'hist-amount ' + (isIncoming ? 'in' : 'out');
+    amtSpan.textContent = `${isIncoming ? '+' : '-'}${item.amount}`;
+
     const txt = document.createElement('span');
     const timeStr = item.ts ? new Date(item.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
-    txt.textContent = `-${item.amount} • ${item.reason}${timeStr ? ` (${timeStr})` : ''}`;
+    txt.textContent = `• ${item.reason}${timeStr ? ` (${timeStr})` : ''}`;
+
     row.appendChild(cb);
+    row.appendChild(amtSpan);
     row.appendChild(txt);
     expenseHistoryList.appendChild(row);
   });
@@ -1739,9 +1774,14 @@ function renderBuiltHouses(){
   });
 }
 
+maxTransferBtn.addEventListener('click', () => {
+  const maxAmt = Math.max(0, Number(tokens.toFixed(2)));
+  transferAmountInput.value = maxAmt;
+});
+
 document.getElementById('sendTokensBtn').addEventListener('click', () => {
   const to = (document.getElementById('recipientCustom').value.trim() || recipientSelect.value || '').trim();
-  const amt = parseFloat(document.getElementById('transferAmount').value);
+  const amt = parseFloat(transferAmountInput.value);
   if (!to || to === myPeerId || isNaN(amt) || amt <= 0 || tokens < amt) return;
   const fee = Number((amt * 0.01).toFixed(2));
   const net = Number((amt - fee).toFixed(2));
@@ -1768,10 +1808,10 @@ function openStats(){
   }
   selectedExpenseIds.clear();
   syncTimeframeUI();
+  statsModal.classList.add('show');
   drawChart();
   renderExpenseHistory();
   renderBuiltHouses();
-  statsModal.classList.add('show');
 }
 document.getElementById('tokenCounterDock').addEventListener('click', openStats);
 document.getElementById('closeStatsBtn').addEventListener('click', () => statsModal.classList.remove('show'));
