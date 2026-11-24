@@ -5,11 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <link rel="icon" type="image/png" sizes="512x512" href="jetpark.PNG">
 <link rel="apple-touch-icon" sizes="180x180" href="jetpark.PNG?v=2">
-<meta property="og:image" content="/Verge.jpeg">
-<meta property="og:image:width" content="1280">
-<meta property="og:image:height" content="1280">
-<link rel="manifest" href="manifest.json">
-<title>Outside-in | Jetpack Mint & Build</title>
+<link rel="manifest" href="manifest-outside-in.json">
+<title>Outside-in Jetpack | Mint & Build</title>
 <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
 <style>
 :root{
@@ -365,9 +362,10 @@ canvas#statsChart:active{cursor:grabbing}
     </div>
     <p><strong>Touch Controls:</strong> Drag up or down on the left half of the screen for throttle; drag on the right half to tilt.</p>
     <p><strong>Desktop Controls:</strong> Use Arrow keys (<code>←</code> <code>↑</code> <code>↓</code> <code>→</code>) or hold left mouse button and drag to tilt; hold <code>Space</code> for forward thrust (double-tap <code>Space</code> for boost) or <code>B</code> for reverse thrust.</p>
-    <p><strong>Reticle &amp; Modes:</strong> Drag the crosshair to aim. <strong>Tap</strong> the crosshair to open or close the mode menu (<code>Build</code>, <code>Attack</code>, <code>Hack</code>), select a mode, and <strong>long-press</strong> the crosshair to activate it.</p>
+    <p><strong>Reticle &amp; Modes:</strong> Drag the crosshair to aim. <strong>Tap</strong> the crosshair to open or close the mode menu (<code>Build</code>, <code>Attack</code>, <code>Hack</code>), select a mode, and <strong>long-press</strong> the crosshair (or hold/press <code>F</code>) to activate it.</p>
     <p><strong>Free Flight &amp; Gravity:</strong> Fly in any direction indefinitely. Gravity is zero at the planet center and zero at the matching outer height.</p>
-    <p><strong>Rings & Buildings:</strong> Fly through the rings to collect tokens and build houses.</p>
+    <p><strong>Water, Terrain &amp; Pass-Through Zones:</strong> The transparent shimmering water zone slows thrust, gravity, and momentum. Solid terrain is opaque and impassable without surface movement, with pass-through openings and a camera guard shell.</p>
+    <p><strong>Houses, Roofs &amp; Bridges:</strong> Buildings place on your current side without overlapping, feature roof accents matching the nearest sector center, and can span horizontally as arches or bridges when anchored to another building wall.</p>
     <p><strong>Hack Houses &amp; Flyers:</strong> Hack stored tokens from other players' buildings or hack nearby players mid-flight.</p>
     <div class="help-footer-logo">
       <a href="https://eugenebox.t.me" target="_blank" rel="noopener noreferrer" title="Telegram">
@@ -422,7 +420,7 @@ const DAMPING_MOVE = 0.99;
 const PLANET_RADIUS = 2100;
 const PLANET_SHELL_THICKNESS = 18;
 const WATER_OUTER_OFFSET = 16;
-const WATER_INNER_OFFSET = 200;
+const WATER_INNER_OFFSET = 50;
 const WATER_THRUST_FACTOR = 0.55;
 const WATER_GRAVITY_FACTOR = 0.6;
 const WATER_DAMPING_MOVE = 0.945;
@@ -771,16 +769,30 @@ function createBaseSurfaceGridMaterial(baseFillAlpha, gridAlpha, gridScale){
       uniform float uBaseFill;
       uniform float uGridAlpha;
       void main(){
-        float dist = length(vWorldPosition - cameraPosition);
-        float farFade = 1.0 - smoothstep(260.0, 2400.0, dist);
-        vec2 p1 = vWorldPosition.xy * uSize;
-        vec2 p2 = vWorldPosition.zy * uSize;
-        vec2 grid = abs(fract(p1 - 0.5) - 0.5) / max(fwidth(p1), 0.0001);
-        vec2 grid2 = abs(fract(p2 - 0.5) - 0.5) / max(fwidth(p2), 0.0001);
-        float line = min(min(grid.x, grid.y), min(grid2.x, grid2.y));
-        float thinLine = 1.0 - min(line / 0.65, 1.0);
-        float alpha = max(uBaseFill * farFade, thinLine * farFade * uGridAlpha);
-        if (alpha < 0.005) discard;
+  float dist = length(vWorldPosition - cameraPosition);
+
+// Фиксированная частота волн в мировых координатах (без раздувания с расстоянием)
+float freq = 0.035;
+float freqY = 0.025;
+
+// Плавное гашение высокочастотной ряби на очень больших дистанциях
+float detailFade = 1.0 - smoothstep(1800.0, 6000.0, dist);
+
+vec3 refractDir = refract(-viewDir, n, 0.75);
+float waveA = sin(vWorldPosition.x * freq + refractDir.x * 4.5 + uTime * 1.4);
+float waveB = cos(vWorldPosition.z * freq + refractDir.z * 4.5 - uTime * 1.1);
+float waveC = sin((vWorldPosition.y + vWorldPosition.x) * freqY + uTime * 0.9);
+
+float rawShimmer = (waveA * 0.45 + waveB * 0.35 + waveC * 0.2) * 0.5 + 0.5;
+float shimmer = mix(0.5, rawShimmer, detailFade);
+float caustic = pow(shimmer, 2.5);
+
+vec3 deepWater = vec3(0.02, 0.12, 0.42);
+vec3 refractedTint = vec3(0.08, 0.42, 0.95) + refractDir * 0.08;
+vec3 iridescence = mix(refractedTint, vec3(0.28, 0.72, 1.0), shimmer * 0.5);
+vec3 col = mix(deepWater, iridescence, 0.48 + fresnel * 0.35) + vec3(0.25, 0.65, 1.0) * caustic * 0.22;
+
+float alpha = clamp(0.22 + fresnel * 0.22 + caustic * 0.12, 0.22, 0.58);  if (alpha < 0.005) discard;
         vec3 col = mix(vec3(0.01, 0.01, 0.015), vec3(0.16, 0.2, 0.28), thinLine * 0.75);
         gl_FragColor = vec4(col, alpha);
       }
@@ -817,30 +829,30 @@ function createRefractiveWaterMaterial(baseOpacity, timeUniform){
         vec3 viewDir = normalize(cameraPosition - vWorldPosition);
         vec3 n = normalize(vWorldNormal);
         float ndotv = abs(dot(n, viewDir));
-        float fresnel = pow(1.0 - clamp(ndotv, 0.0, 1.0), 2.4);
-
-        vec3 refractDir = refract(-viewDir, n, 0.75);
-        float waveA = sin(vWorldPosition.x * 0.035 + refractDir.x * 4.5 + uTime * 1.4);
-        float waveB = cos(vWorldPosition.z * 0.035 + refractDir.z * 4.5 - uTime * 1.1);
-        float waveC = sin((vWorldPosition.y + vWorldPosition.x) * 0.025 + uTime * 0.9);
-        float shimmer = clamp((waveA * 0.45 + waveB * 0.35 + waveC * 0.2) * 0.5 + 0.5, 0.0, 1.0);
-        float caustic = pow(shimmer, 3.2);
+        float fresnel = pow(1.0 - clamp(ndotv, 0.0, 1.0), 2.0);
 
         float dist = length(vWorldPosition - cameraPosition);
-        float farFade = 1.0 - smoothstep(260.0, 2600.0, dist);
+        float detailFade = 1.0 - smoothstep(1800.0, 6000.0, dist);
 
-        vec3 deepWater = vec3(0.015, 0.08, 0.34);
-        vec3 refractedTint = vec3(0.04, 0.30, 0.82) + refractDir * 0.06;
-        vec3 iridescence = mix(refractedTint, vec3(0.18, 0.62, 0.98), shimmer * 0.45);
-        vec3 col = mix(deepWater, iridescence, 0.42 + fresnel * 0.42) + vec3(0.22, 0.62, 1.0) * caustic * 0.24;
+        float waveA = sin(vWorldPosition.x * 0.035 + uTime * 1.4);
+        float waveB = cos(vWorldPosition.z * 0.035 - uTime * 1.1);
+        float waveC = sin((vWorldPosition.y + vWorldPosition.x) * 0.025 + uTime * 0.9);
 
-        float alpha = clamp((uBaseOpacity * 0.42 + fresnel * 0.24 + caustic * 0.14) * farFade, 0.015, 0.38);
-        if (alpha < 0.006) discard;
+        float rawShimmer = (waveA * 0.45 + waveB * 0.35 + waveC * 0.2) * 0.5 + 0.5;
+        float shimmer = mix(0.5, rawShimmer, detailFade);
+        float caustic = shimmer * shimmer;
+
+        vec3 deepWater = vec3(0.02, 0.12, 0.42);
+        vec3 brightWater = vec3(0.14, 0.52, 0.96);
+        vec3 col = mix(deepWater, brightWater, clamp(shimmer * 0.65 + fresnel * 0.35, 0.0, 1.0));
+        col += vec3(0.20, 0.55, 0.95) * caustic * 0.25 * detailFade;
+
+        float alpha = clamp(uBaseOpacity + fresnel * 0.20 + caustic * 0.12, 0.18, 0.55);
         gl_FragColor = vec4(col, alpha);
       }
     `
   });
-}
+} 
 
 const waterTimeUniform = { value: 0 };
 
@@ -994,8 +1006,8 @@ shader.fragmentShader = shader.fragmentShader
        float ridgeB = sin(n.y * 8.0 - n.z * 6.0) * 0.5;
        float landmass = ridgeA + ridgeB;
 
-float surface1R = 1500.0 + max(6.0, 18.0 + (landmass * 34.0) + (ridgeB * 14.0));
-float surface2R = max(10.0, 2100.0 - max(6.0, 18.0 - (-landmass * 32.0) - (ridgeA * 12.0)));       float vol1 = max(0.0, surface1R - 1500.0);
+float surface1R = 2100.0 + max(6.0, 18.0 + (landmass * 34.0) + (ridgeB * 14.0));
+float surface2R = max(10.0, 2100.0 - max(6.0, 18.0 - (-landmass * 32.0) - (ridgeA * 12.0)));       float vol1 = max(0.0, surface1R - 2100.0);
        float vol2 = max(0.0, 2100.0 - surface2R);
        bool s1Larger = vol1 >= vol2;
 
@@ -1569,7 +1581,7 @@ function computePlacementOnPlayerSide(aimPoint){
 
 const backgroundPlanets = [];
 [
-  { radius: 500, color: 0xe27b58, x: 3500, y: 1500, z: -2000, rotSpeed: 0.002 },
+  { radius: 500, color: 0xe27b58, x: 3500, y: 2100, z: -2000, rotSpeed: 0.002 },
   { radius: 800, color: 0x47637c, x: -4500, y: -2000, z: -3000, rotSpeed: 0.001 },
   { radius: 300, color: 0x8d5b9c, x: -4000, y: -4000, z: -4000, rotSpeed: 0.003 }
 ].forEach(data => {
@@ -1770,7 +1782,7 @@ setInterval(() => {
     });
   }
   updatePresenceUI();
-}, 1500);
+}, 2100);
 
 function sendChat(){
   const txt = chatInput.value.trim();
