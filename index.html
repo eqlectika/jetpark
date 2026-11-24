@@ -878,6 +878,13 @@ planetShellGroup.add(waterOuterMesh, waterInnerMesh);
 
 function isInWaterLayer(pos){
   const r = pos.length();
+  if (r < 0.001) return false;
+  const dir = pos.clone().normalize();
+  const info = sampleTerrainAtDir(dir);
+  // Внутри замкнутого участка суши воды быть не должно
+  if (!info.isPassThrough && r >= info.innerSolidR && r <= info.outerSolidR){
+    return false;
+  }
   return r >= waterInnerRadius && r <= waterOuterRadius;
 }
 
@@ -905,16 +912,17 @@ const surface1R = PLANET_RADIUS + Math.max(4, 10 + (landmass * 16.0) + (ridgeB *
   const vol2 = Math.max(0, PLANET_RADIUS - surface2R);
   const s1Larger = vol1 >= vol2;
 
-  const isIntersectionOfSurfaces = Math.abs(surface1R - surface2R) < 6.0;
-  const cutSmallerSide = isIntersectionOfSurfaces && (s1Larger ? vol2 < vol1 * 0.65 : vol1 < vol2 * 0.65);
+  const isIntersectionOfSurfaces = Math.abs(surface1R - surface2R) < 12.0;
+  const cutSmallerSide = isIntersectionOfSurfaces && (s1Larger ? (vol2 < vol1 * 0.85) : (vol1 < vol2 * 0.85));
 
   const isPassThrough = minWindowAngle < windowRadiusRad || landmass < -0.58 || cutSmallerSide;
 
-  const unifiedOuterR = Math.max(surface1R, surface2R);
-  const unifiedInnerR = Math.min(surface1R, surface2R);
+  // Замыкаем оба слоя в единый объём: большая сторона задаёт внешний край,
+  // а внутренняя граница смыкается к ней / к базовому радиусу без зазора с водой
+const closedR = s1Larger ? surface1R : surface2R;
 
-  let outerSolidR = s1Larger ? unifiedOuterR : PLANET_RADIUS + 4;
-  let innerSolidR = !s1Larger ? unifiedInnerR : PLANET_RADIUS - 4;
+  let outerSolidR = closedR;
+  let innerSolidR = closedR;
 
   if (isPassThrough){
     outerSolidR = PLANET_RADIUS - 24;
