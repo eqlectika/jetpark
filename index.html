@@ -897,13 +897,24 @@ function sampleTerrainAtDir(dir){
     if (ang < minWindowAngle) minWindowAngle = ang;
   }
   const windowRadiusRad = 0.24;
-  const isPassThrough = minWindowAngle < windowRadiusRad || landmass < -0.58;
 
-  const outerRelief = (landmass * 16.0) + (ridgeB * 7.0);
-  const innerRelief = (-landmass * 15.0) - (ridgeA * 6.0);
+const surface1R = PLANET_RADIUS + Math.max(4, 10 + (landmass * 16.0) + (ridgeB * 7.0));
+  const surface2R = Math.max(10, PLANET_RADIUS - Math.max(4, 10 - (-landmass * 15.0) - (ridgeA * 6.0)));
 
-  let outerSolidR = PLANET_RADIUS + Math.max(4, 10 + outerRelief);
-  let innerSolidR = PLANET_RADIUS - Math.max(4, 10 - innerRelief);
+  const vol1 = Math.max(0, surface1R - PLANET_RADIUS);
+  const vol2 = Math.max(0, PLANET_RADIUS - surface2R);
+  const s1Larger = vol1 >= vol2;
+
+  const isIntersectionOfSurfaces = Math.abs(surface1R - surface2R) < 6.0;
+  const cutSmallerSide = isIntersectionOfSurfaces && (s1Larger ? vol2 < vol1 * 0.65 : vol1 < vol2 * 0.65);
+
+  const isPassThrough = minWindowAngle < windowRadiusRad || landmass < -0.58 || cutSmallerSide;
+
+  const unifiedOuterR = Math.max(surface1R, surface2R);
+  const unifiedInnerR = Math.min(surface1R, surface2R);
+
+  let outerSolidR = s1Larger ? unifiedOuterR : PLANET_RADIUS + 4;
+  let innerSolidR = !s1Larger ? unifiedInnerR : PLANET_RADIUS - 4;
 
   if (isPassThrough){
     outerSolidR = PLANET_RADIUS - 24;
@@ -924,8 +935,10 @@ function buildDisplacedShellGeometry(radius, segW, segH, useOuterSide){
   for (let i = 0; i < posAttr.count; i++){
     v.fromBufferAttribute(posAttr, i);
     const dir = v.clone().normalize();
-    const info = sampleTerrainAtDir(dir);
-    const targetR = useOuterSide ? info.outerSolidR : info.innerSolidR;
+const info = sampleTerrainAtDir(dir);
+const targetR = info.isPassThrough
+  ? (useOuterSide ? PLANET_RADIUS - 24 : PLANET_RADIUS - 32)
+  : (useOuterSide ? info.outerSolidR : info.innerSolidR);
     v.copy(dir).multiplyScalar(targetR);
     posAttr.setXYZ(i, v.x, v.y, v.z);
   }
@@ -945,6 +958,46 @@ const solidTerrainMat = new THREE.MeshStandardMaterial({
   opacity: 1.0,
   side: THREE.DoubleSide
 });
+
+solidTerrainMat.onBeforeCompile = (shader) => {
+  shader.vertexShader = shader.vertexShader
+    .replace(
+      '#include <common>',
+      `#include <common>
+       varying vec3 vCutWorldPos;`
+    )
+    .replace(
+      '#include <worldpos_vertex>',
+      `#include <worldpos_vertex>
+       vCutWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`
+    );
+
+  shader.fragmentShader = shader.fragmentShader
+    .replace(
+      '#include <common>',
+      `#include <common>
+       varying vec3 vCutWorldPos;`
+    )
+    .replace(
+      '#include <clipping_planes_fragment>',
+      `#include <clipping_planes_fragment>
+       vec3 n = normalize(vCutWorldPos);
+       float ridgeA = sin(n.x * 5.0 + n.y * 3.0) * cos(n.z * 4.0 - n.x * 2.0);
+       float ridgeB = sin(n.y * 8.0 - n.z * 6.0) * 0.5;
+       float landmass = ridgeA + ridgeB;
+
+       float surface1R = 1500.0 + max(4.0, 10.0 + (landmass * 16.0) + (ridgeB * 7.0));
+       float surface2R = max(10.0, 1500.0 - max(4.0, 10.0 - (-landmass * 15.0) - (ridgeA * 6.0)));
+       float vol1 = max(0.0, surface1R - 1500.0);
+       float vol2 = max(0.0, 1500.0 - surface2R);
+       bool s1Larger = vol1 >= vol2;
+
+       bool isIntersectionOfSurfaces = abs(surface1R - surface2R) < 12.0;
+       bool cutSmallerSide = isIntersectionOfSurfaces && (s1Larger ? (vol2 < vol1 * 0.85) : (vol1 < vol2 * 0.85));
+
+       if (landmass < -0.58 || cutSmallerSide) discard;`
+    );
+};
 
 const solidOuterMesh = new THREE.Mesh(solidOuterGeo, solidTerrainMat);
 const solidInnerMesh = new THREE.Mesh(solidInnerGeo, solidTerrainMat);
