@@ -536,7 +536,7 @@ document.getElementById('startButton').addEventListener('click', () => {
 
 let currentThrottle = 0;
 let touchJoystick = { active: false, startX: 0, startY: 0, moveX: 0, moveY: 0 };
-const isReverseThrust = true;
+const isReverseThrust = false;
 
 const throttleArea = document.getElementById('throttleArea');
 const controlArea = document.getElementById('controlArea');
@@ -604,7 +604,7 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 const player = new THREE.Group();
 player.position.set(0, 0, 0);
 scene.add(player);
-camera.quaternion.setFromEuler(new THREE.Euler(Math.PI, 0, 0, 'YXZ'));
+camera.quaternion.setFromEuler(new THREE.Euler(0, 0, 0, 'YXZ'));
 player.add(camera);
 
 /* Invisible protective guard shell around camera focus so focus never enters solid terrain */
@@ -2301,21 +2301,24 @@ function computeGravity(pos, inWater = false){
   return r < PLANET_RADIUS ? dir.multiplyScalar(g) : dir.multiplyScalar(-g);
 }
 
-function applyPendulumSelfLeveling(hasControlInput){
-  const r = player.position.length();
-  const localDown = r > 0.001
-    ? player.position.clone().normalize().negate()
-    : new THREE.Vector3(0, -1, 0);
+function applyPendulumSelfLeveling(hasControlInput, gravityVec){
+  if (hasControlInput) return;
+  if (!gravityVec || gravityVec.lengthSq() < 1e-10) return;
 
-  if (!hasControlInput){
-    const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(player.quaternion).normalize();
-    const targetUp = localDown.clone().negate();
-    const alignQuat = new THREE.Quaternion().setFromUnitVectors(currentUp, targetUp);
-    const stepQuat = new THREE.Quaternion().slerp(alignQuat, 0.0022);
-    player.quaternion.premultiply(stepQuat);
-    angularVelocityX *= 0.985;
-    angularVelocityZ *= 0.985;
-  }
+  const localDown = gravityVec.clone().normalize();
+  const targetUp = localDown.clone().negate();
+
+  const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(player.quaternion).normalize();
+  const alignQuat = new THREE.Quaternion().setFromUnitVectors(currentUp, targetUp);
+
+  const gravStrength = Math.min(1, gravityVec.length() / Math.max(GRAVITY, 1e-6));
+  const stepFactor = 0.0022 * gravStrength;
+
+  const stepQuat = new THREE.Quaternion().slerp(alignQuat, stepFactor);
+  player.quaternion.premultiply(stepQuat);
+
+  angularVelocityX *= 0.985;
+  angularVelocityZ *= 0.985;
 }
 
 function updateHoldActions(nowMs){
@@ -2379,15 +2382,15 @@ function animate(){
   const inWater = isInWaterLayer(player.position);
   let hasControlInput = false;
 
-  if (Date.now() >= frozenUntil){
-    if (keys['ArrowLeft']){ angularVelocityZ -= TURN_SPEED; hasControlInput = true; }
-    if (keys['ArrowRight']){ angularVelocityZ += TURN_SPEED; hasControlInput = true; }
+if (Date.now() >= frozenUntil){
+    if (keys['ArrowLeft']){ angularVelocityZ += TURN_SPEED; hasControlInput = true; }
+    if (keys['ArrowRight']){ angularVelocityZ -= TURN_SPEED; hasControlInput = true; }
     if (keys['ArrowUp']){ angularVelocityX -= TURN_SPEED; hasControlInput = true; }
     if (keys['ArrowDown']){ angularVelocityX += TURN_SPEED; hasControlInput = true; }
 
     if (touchJoystick.active && (Math.abs(touchJoystick.moveX) > 0.02 || Math.abs(touchJoystick.moveY) > 0.02)){
       angularVelocityX += touchJoystick.moveY * TOUCH_TURN_SPEED;
-      angularVelocityZ += touchJoystick.moveX * TOUCH_TURN_SPEED;
+      angularVelocityZ -= touchJoystick.moveX * TOUCH_TURN_SPEED;
       hasControlInput = true;
     }
 
@@ -2423,10 +2426,9 @@ function animate(){
     angularVelocityZ *= 0.85;
   }
 
-  applyPendulumSelfLeveling(hasControlInput);
-
-  velocity.add(computeGravity(player.position, inWater));
-  velocity.multiplyScalar(inWater ? WATER_DAMPING_MOVE : DAMPING_MOVE);
+const gravityVec = computeGravity(player.position, inWater);
+  applyPendulumSelfLeveling(hasControlInput, gravityVec);
+  velocity.add(gravityVec);  velocity.multiplyScalar(inWater ? WATER_DAMPING_MOVE : DAMPING_MOVE);
   player.position.add(velocity);
   resolveSolidTerrainCollision(player.position, velocity, 0.5);
 
