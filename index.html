@@ -362,9 +362,8 @@ canvas#statsChart:active{cursor:grabbing}
     </div>
     <p><strong>Touch Controls:</strong> Drag up or down on the left half of the screen for throttle; drag on the right half to tilt.</p>
     <p><strong>Desktop Controls:</strong> Use Arrow keys (<code>←</code> <code>↑</code> <code>↓</code> <code>→</code>) or hold left mouse button and drag to tilt; hold <code>Space</code> for forward thrust (double-tap <code>Space</code> for boost) or <code>B</code> for reverse thrust.</p>
-    <p><strong>Reticle &amp; Modes:</strong> Drag the crosshair to aim. <strong>Tap</strong> the crosshair to open or close the mode menu (<code>Build</code>, <code>Attack</code>, <code>Hack</code>), select a mode, and <strong>long-press</strong> the crosshair (or hold/press <code>F</code>) to activate it.</p>
+    <p><strong>Reticle &amp; Modes:</strong> Drag the crosshair to aim. <strong>Tap</strong> the crosshair to open or close the mode menu (<code>Build</code>, <code>Attack</code>, <code>Hack</code>), select a mode, and <strong>long-press</strong> the crosshair to activate it.</p>
     <p><strong>Free Flight &amp; Gravity:</strong> Fly in any direction indefinitely. Gravity is zero at the planet center and zero at the matching outer height.</p>
-    <p><strong>Water, Terrain &amp; Pass-Through Zones:</strong> The transparent shimmering water zone slows thrust, gravity, and momentum. Solid terrain is opaque and impassable without surface movement, with pass-through openings and a camera guard shell.</p>
     <p><strong>Houses, Roofs &amp; Bridges:</strong> Buildings place on your current side without overlapping, feature roof accents matching the nearest sector center, and can span horizontally as arches or bridges when anchored to another building wall.</p>
     <p><strong>Hack Houses &amp; Flyers:</strong> Hack stored tokens from other players' buildings or hack nearby players mid-flight.</p>
     <div class="help-footer-logo">
@@ -417,10 +416,10 @@ const TOUCH_TURN_SPEED = 0.0005;
 const GRAVITY = 0.0043333;
 const DAMPING_TURN = 0.99;
 const DAMPING_MOVE = 0.99;
-const PLANET_RADIUS = 2100;
+const PLANET_RADIUS = 1500;
 const PLANET_SHELL_THICKNESS = 18;
-const WATER_OUTER_OFFSET = 16;
-const WATER_INNER_OFFSET = 200;
+const WATER_OUTER_OFFSET = 14;
+const WATER_INNER_OFFSET = 14;
 const WATER_THRUST_FACTOR = 0.55;
 const WATER_GRAVITY_FACTOR = 0.6;
 const WATER_DAMPING_MOVE = 0.945;
@@ -435,7 +434,8 @@ const store = {
     const key = 'oip_' + k;
     try{
       const v = localStorage.getItem(key);
-      if (v !== null) return JSON.parse(v);     }catch{}
+      if (v !== null) return JSON.parse(v);
+    }catch{}
     return Object.prototype.hasOwnProperty.call(memoryStore, key) ? memoryStore[key] : fb;
   },
   set(k, v){
@@ -535,7 +535,7 @@ document.getElementById('startButton').addEventListener('click', () => {
 
 let currentThrottle = 0;
 let touchJoystick = { active: false, startX: 0, startY: 0, moveX: 0, moveY: 0 };
-const isReverseThrust = false;
+const isReverseThrust = true;
 
 const throttleArea = document.getElementById('throttleArea');
 const controlArea = document.getElementById('controlArea');
@@ -603,7 +603,7 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 const player = new THREE.Group();
 player.position.set(0, 0, 0);
 scene.add(player);
-camera.quaternion.setFromEuler(new THREE.Euler(0, 0, 0, 'YXZ'));
+camera.quaternion.setFromEuler(new THREE.Euler(Math.PI, 0, 0, 'YXZ'));
 player.add(camera);
 
 /* Invisible protective guard shell around camera focus so focus never enters solid terrain */
@@ -877,13 +877,6 @@ planetShellGroup.add(waterOuterMesh, waterInnerMesh);
 
 function isInWaterLayer(pos){
   const r = pos.length();
-  if (r < 0.001) return false;
-  const dir = pos.clone().normalize();
-  const info = sampleTerrainAtDir(dir);
-  // Внутри замкнутого участка суши воды быть не должно
-  if (!info.isPassThrough && r >= info.innerSolidR && r <= info.outerSolidR){
-    return false;
-  }
   return r >= waterInnerRadius && r <= waterOuterRadius;
 }
 
@@ -903,24 +896,13 @@ function sampleTerrainAtDir(dir){
     if (ang < minWindowAngle) minWindowAngle = ang;
   }
   const windowRadiusRad = 0.24;
+  const isPassThrough = minWindowAngle < windowRadiusRad || landmass < -0.58;
 
-const surface1R = PLANET_RADIUS + Math.max(6, 18 + (landmass * 34.0) + (ridgeB * 14.0));
-const surface2R = Math.max(10, PLANET_RADIUS - Math.max(6, 18 - (-landmass * 32.0) - (ridgeA * 12.0)));
-  const vol1 = Math.max(0, surface1R - PLANET_RADIUS);
-  const vol2 = Math.max(0, PLANET_RADIUS - surface2R);
-  const s1Larger = vol1 >= vol2;
+  const outerRelief = (landmass * 16.0) + (ridgeB * 7.0);
+  const innerRelief = (-landmass * 15.0) - (ridgeA * 6.0);
 
-  const isIntersectionOfSurfaces = Math.abs(surface1R - surface2R) < 22.0;
-  const cutSmallerSide = isIntersectionOfSurfaces && (s1Larger ? (vol2 < vol1 * 0.95) : (vol1 < vol2 * 0.95));
-
-  const isPassThrough = minWindowAngle < windowRadiusRad || landmass < -0.35 || cutSmallerSide;
-
-  // Замыкаем оба слоя в единый объём: большая сторона задаёт внешний край,
-  // а внутренняя граница смыкается к ней / к базовому радиусу без зазора с водой
-const closedR = s1Larger ? surface1R : surface2R;
-
-  let outerSolidR = closedR;
-  let innerSolidR = closedR;
+  let outerSolidR = PLANET_RADIUS + Math.max(4, 10 + outerRelief);
+  let innerSolidR = PLANET_RADIUS - Math.max(4, 10 - innerRelief);
 
   if (isPassThrough){
     outerSolidR = PLANET_RADIUS - 24;
@@ -941,10 +923,8 @@ function buildDisplacedShellGeometry(radius, segW, segH, useOuterSide){
   for (let i = 0; i < posAttr.count; i++){
     v.fromBufferAttribute(posAttr, i);
     const dir = v.clone().normalize();
-const info = sampleTerrainAtDir(dir);
-const targetR = info.isPassThrough
-  ? (useOuterSide ? PLANET_RADIUS - 24 : PLANET_RADIUS - 32)
-  : (useOuterSide ? info.outerSolidR : info.innerSolidR);
+    const info = sampleTerrainAtDir(dir);
+    const targetR = useOuterSide ? info.outerSolidR : info.innerSolidR;
     v.copy(dir).multiplyScalar(targetR);
     posAttr.setXYZ(i, v.x, v.y, v.z);
   }
@@ -964,62 +944,6 @@ const solidTerrainMat = new THREE.MeshStandardMaterial({
   opacity: 1.0,
   side: THREE.DoubleSide
 });
-
-solidTerrainMat.onBeforeCompile = (shader) => {
-  shader.vertexShader = shader.vertexShader
-    .replace(
-      '#include <common>',
-      `#include <common>
-       varying vec3 vCutWorldPos;`
-    )
-    .replace(
-      '#include <worldpos_vertex>',
-      `#include <worldpos_vertex>
-       vCutWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`
-    );
-
-shader.fragmentShader = shader.fragmentShader
-    .replace(
-      '#include <common>',
-      `#include <common>
-       varying vec3 vCutWorldPos;`
-    )
-    .replace(
-      '#include <clipping_planes_fragment>',
-      `#include <clipping_planes_fragment>
-       vec3 n = normalize(vCutWorldPos);
-       float ridgeA = sin(n.x * 5.0 + n.y * 3.0) * cos(n.z * 4.0 - n.x * 2.0);
-       float ridgeB = sin(n.y * 8.0 - n.z * 6.0) * 0.5;
-       float landmass = ridgeA + ridgeB;
-
-float surface1R = 1500.0 + max(6.0, 18.0 + (landmass * 34.0) + (ridgeB * 14.0));
-float surface2R = max(10.0, 2100.0 - max(6.0, 18.0 - (-landmass * 32.0) - (ridgeA * 12.0)));       float vol1 = max(0.0, surface1R - 1500.0);
-       float vol2 = max(0.0, 2100.0 - surface2R);
-       bool s1Larger = vol1 >= vol2;
-
-       bool isIntersectionOfSurfaces = abs(surface1R - surface2R) < 22.0;
-       bool cutSmallerSide = isIntersectionOfSurfaces && (s1Larger ? (vol2 < vol1 * 0.95) : (vol1 < vol2 * 0.95));
-
-       if (landmass < -0.35 || cutSmallerSide) discard;`
-    )
-    .replace(
-      '#include <dithering_fragment>',
-      `float rPos = length(vCutWorldPos);
-       float aboveMask = smoothstep(1512.0, 1516.0, rPos);
-       float belowMask = 1.0 - smoothstep(1484.0, 1488.0, rPos);
-
-       float softGrain = 0.96 + 0.04 * sin(vCutWorldPos.x * 0.25) * cos(vCutWorldPos.z * 0.25);
-
-       vec3 aboveLand = vec3(0.46, 0.39, 0.30) * softGrain;
-       vec3 belowLand = vec3(0.05, 0.13, 0.24) * softGrain;
-       vec3 midBand   = vec3(0.14, 0.26, 0.40) * softGrain;
-
-       vec3 targetCol = mix(midBand, aboveLand, aboveMask);
-       targetCol = mix(targetCol, belowLand, belowMask);
-       gl_FragColor.rgb = mix(gl_FragColor.rgb, targetCol, 0.55);
-       #include <dithering_fragment>`
-    );
-};
 
 const solidOuterMesh = new THREE.Mesh(solidOuterGeo, solidTerrainMat);
 const solidInnerMesh = new THREE.Mesh(solidInnerGeo, solidTerrainMat);
@@ -2376,24 +2300,21 @@ function computeGravity(pos, inWater = false){
   return r < PLANET_RADIUS ? dir.multiplyScalar(g) : dir.multiplyScalar(-g);
 }
 
-function applyPendulumSelfLeveling(hasControlInput, gravityVec){
-  if (hasControlInput) return;
-  if (!gravityVec || gravityVec.lengthSq() < 1e-10) return;
+function applyPendulumSelfLeveling(hasControlInput){
+  const r = player.position.length();
+  const localDown = r > 0.001
+    ? player.position.clone().normalize().negate()
+    : new THREE.Vector3(0, -1, 0);
 
-  const localDown = gravityVec.clone().normalize();
-  const targetUp = localDown.clone().negate();
-
-  const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(player.quaternion).normalize();
-  const alignQuat = new THREE.Quaternion().setFromUnitVectors(currentUp, targetUp);
-
-  const gravStrength = Math.min(1, gravityVec.length() / Math.max(GRAVITY, 1e-6));
-  const stepFactor = 0.0022 * gravStrength;
-
-  const stepQuat = new THREE.Quaternion().slerp(alignQuat, stepFactor);
-  player.quaternion.premultiply(stepQuat);
-
-  angularVelocityX *= 0.985;
-  angularVelocityZ *= 0.985;
+  if (!hasControlInput){
+    const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(player.quaternion).normalize();
+    const targetUp = localDown.clone().negate();
+    const alignQuat = new THREE.Quaternion().setFromUnitVectors(currentUp, targetUp);
+    const stepQuat = new THREE.Quaternion().slerp(alignQuat, 0.0022);
+    player.quaternion.premultiply(stepQuat);
+    angularVelocityX *= 0.985;
+    angularVelocityZ *= 0.985;
+  }
 }
 
 function updateHoldActions(nowMs){
@@ -2457,15 +2378,15 @@ function animate(){
   const inWater = isInWaterLayer(player.position);
   let hasControlInput = false;
 
-if (Date.now() >= frozenUntil){
-    if (keys['ArrowLeft']){ angularVelocityZ += TURN_SPEED; hasControlInput = true; }
-    if (keys['ArrowRight']){ angularVelocityZ -= TURN_SPEED; hasControlInput = true; }
+  if (Date.now() >= frozenUntil){
+    if (keys['ArrowLeft']){ angularVelocityZ -= TURN_SPEED; hasControlInput = true; }
+    if (keys['ArrowRight']){ angularVelocityZ += TURN_SPEED; hasControlInput = true; }
     if (keys['ArrowUp']){ angularVelocityX -= TURN_SPEED; hasControlInput = true; }
     if (keys['ArrowDown']){ angularVelocityX += TURN_SPEED; hasControlInput = true; }
 
     if (touchJoystick.active && (Math.abs(touchJoystick.moveX) > 0.02 || Math.abs(touchJoystick.moveY) > 0.02)){
       angularVelocityX += touchJoystick.moveY * TOUCH_TURN_SPEED;
-      angularVelocityZ -= touchJoystick.moveX * TOUCH_TURN_SPEED;
+      angularVelocityZ += touchJoystick.moveX * TOUCH_TURN_SPEED;
       hasControlInput = true;
     }
 
@@ -2501,27 +2422,11 @@ if (Date.now() >= frozenUntil){
     angularVelocityZ *= 0.85;
   }
 
-const gravityVec = computeGravity(player.position, inWater);
-  applyPendulumSelfLeveling(hasControlInput, gravityVec);
-  velocity.add(gravityVec);  velocity.multiplyScalar(inWater ? WATER_DAMPING_MOVE : DAMPING_MOVE);
-  player.position.add(velocity);
-  if (!hasControlInput && Date.now() >= frozenUntil){
-    const rNow = player.position.length();
-    const minFreeGap = 6.0;
-    if (rNow > 0.001 && Math.abs(rNow - PLANET_RADIUS) < minFreeGap){
-      const dirNow = player.position.clone().normalize();
-      const pushOut = rNow >= PLANET_RADIUS;
-      const safeR = pushOut ? (PLANET_RADIUS + minFreeGap) : (PLANET_RADIUS - minFreeGap);
-      player.position.copy(dirNow).multiplyScalar(safeR);
+  applyPendulumSelfLeveling(hasControlInput);
 
-      const radialVel = velocity.dot(dirNow);
-      if (pushOut && radialVel < 0){
-        velocity.addScaledVector(dirNow, -radialVel);
-      } else if (!pushOut && radialVel > 0){
-        velocity.addScaledVector(dirNow, -radialVel);
-      }
-    }
-  }
+  velocity.add(computeGravity(player.position, inWater));
+  velocity.multiplyScalar(inWater ? WATER_DAMPING_MOVE : DAMPING_MOVE);
+  player.position.add(velocity);
   resolveSolidTerrainCollision(player.position, velocity, 0.5);
 
   if (player.position.lengthSq() > 0.25){
