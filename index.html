@@ -2331,6 +2331,38 @@ withdrawAllBtn.addEventListener('click', () => {
     renderBuiltHouses();
   }
 });
+function teleportToBuilding(b){
+  const basePos = new THREE.Vector3(b.x, b.y, b.z);
+  const dir = basePos.length() > 0.001 ? basePos.clone().normalize() : new THREE.Vector3(0, 1, 0);
+  const side = getBuildingSide(b);
+  const up = dir.clone().multiplyScalar(side);
+  const h = getHouseHeight(b);
+
+  const supportR = getSurfaceSupportRadius(dir, side, b.id);
+  const actualR = PLANET_RADIUS + side * Math.max(0, supportR - PLANET_RADIUS);
+  const houseCenter = dir.clone().multiplyScalar(actualR).addScaledVector(up, h * 0.5);
+
+  let tangent = new THREE.Vector3(0, 1, 0).cross(up);
+  if (tangent.lengthSq() < 1e-4) tangent.set(1, 0, 0).cross(up);
+  tangent.normalize();
+
+  const viewDist = Math.max(24, h * 1.4);
+  const targetPos = houseCenter.clone()
+    .addScaledVector(tangent, viewDist)
+    .addScaledVector(up, Math.max(4, h * 0.25));
+
+  velocity.set(0, 0, 0);
+  angularVelocityX = 0;
+  angularVelocityZ = 0;
+  player.position.copy(targetPos);
+  hasMovedFromOrigin = true;
+
+  const lookDir = houseCenter.clone().sub(targetPos).normalize();
+  const m = new THREE.Matrix4().lookAt(new THREE.Vector3(0, 0, 0), lookDir, up);
+  player.quaternion.setFromRotationMatrix(m);
+
+  statsModal.classList.remove('show');
+}
 
 function renderBuiltHouses(){
   const myHouses = buildings.filter(b => b.owner === myPeerId);
@@ -2343,12 +2375,19 @@ function renderBuiltHouses(){
     builtHousesList.innerHTML = '<div style="color:#64748b">No houses built yet</div>';
     return;
   }
-  myHouses.forEach((b, i) => {
+    myHouses.forEach((b, i) => {
     const row = document.createElement('div');
     row.className = 'b-row';
     const info = document.createElement('span');
-    info.textContent = `#${i + 1} (${b.x}, ${b.y}, ${b.z}) — stored: ${b.storedTokens || 0}`;
+    info.appendChild(document.createTextNode(`#${i + 1} `));
+    const coordLink = document.createElement('span');
+    coordLink.textContent = `(${b.x}, ${b.y}, ${b.z})`;
+    coordLink.style.cssText = 'color:#38bdf8;text-decoration:underline;cursor:pointer;';
+    coordLink.addEventListener('click', () => teleportToBuilding(b));
+    info.appendChild(coordLink);
+    info.appendChild(document.createTextNode(` — stored: ${b.storedTokens || 0}`));
     const btn = document.createElement('button');
+
     btn.className = 'act-btn withdraw';
     btn.textContent = 'Withdraw';
     btn.disabled = (b.storedTokens || 0) <= 0;
