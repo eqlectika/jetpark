@@ -264,6 +264,7 @@ canvas#statsChart:active{cursor:grabbing}
   -webkit-background-clip: text;
   color: transparent;
 }
+#wireToggleBtn.on{ color:#fbbf24; }
 </style>
 </head>
 <body>
@@ -273,6 +274,7 @@ canvas#statsChart:active{cursor:grabbing}
 <div class="top-left-hud">
   <span id="presenceBadge" class="presence-badge alone">Alone</span>
   <button id="helpBtn" class="top-btn">Help</button>
+  <button id="wireToggleBtn" class="top-btn" title="Toggle Wire / Solid rendering">Wire</button>
 </div>
 
 <div class="top-right-hud">
@@ -522,6 +524,8 @@ const tokenBalanceEl = document.getElementById('tokenBalanceEl');
 const chatFeed = document.getElementById('chatFeed');
 const chatInput = document.getElementById('chatInput');
 const attackBtn = document.getElementById('attackBtn');
+const wireToggleBtn = document.getElementById('wireToggleBtn');
+const reticleWrapEl = document.getElementById('reticleWrap');
 const reticleMenu = document.getElementById('reticleMenu');
 const peerLabelsLayer = document.getElementById('peerLabelsLayer');
 
@@ -2564,7 +2568,49 @@ const gravityVec = computeGravity(player.position, inWater);
 
   renderer.render(scene, camera);
 }
+/* =========================================================
+   WIRE / SOLID RENDER MODE TOGGLE
+   ========================================================= */
+let wireframeMode = store.get('wire_mode', false);
 
+function collectWireframeTargets(){
+  const meshes = [];
+  scene.traverse(obj => {
+    if (!obj.isMesh || !obj.material) return;
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    const usable = mats.filter(m => m && 'wireframe' in m && !m.isShaderMaterial);
+    if (!usable.length) return;
+    // Пропускаем прозрачные стеклянные оболочки (peer-сферы) — wireframe там бессмысленен
+    if (usable.every(m => m.transparent && m.opacity < 0.05)) return;
+    meshes.push(obj);
+  });
+  return meshes;
+}
+
+function applyWireframeMode(enable){
+  wireframeMode = !!enable;
+  collectWireframeTargets().forEach(obj => {
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    mats.forEach(m => {
+      if (!m || !('wireframe' in m) || m.isShaderMaterial) return;
+      m.wireframe = wireframeMode;
+      m.needsUpdate = true;
+    });
+  });
+  // Скрываем линейные оверлеи (рёбра зданий, акценты арок) — иначе двойной контур
+  scene.traverse(obj => {
+    if (obj.isLineSegments) obj.visible = !wireframeMode;
+  });
+  wireToggleBtn.textContent = wireframeMode ? 'Solid' : 'Wire';
+  wireToggleBtn.classList.toggle('on', wireframeMode);
+  store.set('wire_mode', wireframeMode);
+}
+
+wireToggleBtn.addEventListener('click', () => {
+  applyWireframeMode(!wireframeMode);
+});
+
+applyWireframeMode(wireframeMode);
 animate();
 </script>
 </body>
