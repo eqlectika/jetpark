@@ -416,8 +416,8 @@ document.addEventListener('touchend', (e) => {
 const AUTHOR_ID = 'eugenebox';
 const INITIAL_CAPITAL = 100;
 const FLY_SPEED = 0.013;
-const TURN_SPEED = 0.00034;
-const TOUCH_TURN_SPEED = 0.0005;
+const TURN_SPEED = 0.00021;
+const TOUCH_TURN_SPEED = 0.0001;
 const GRAVITY = 0.0043333;
 const DAMPING_TURN = 0.99;
 const DAMPING_MOVE = 0.99;
@@ -2393,7 +2393,7 @@ function applyPendulumSelfLeveling(hasControlInput, gravityVec){
   const alignQuat = new THREE.Quaternion().setFromUnitVectors(currentUp, targetUp);
 
   const gravStrength = Math.min(1, gravityVec.length() / Math.max(GRAVITY, 1e-6));
-  const stepFactor = 0.0022 * gravStrength;
+  const stepFactor = 0.0055 * gravStrength;
 
   const stepQuat = new THREE.Quaternion().slerp(alignQuat, stepFactor);
   player.quaternion.premultiply(stepQuat);
