@@ -415,16 +415,16 @@ document.addEventListener('touchend', (e) => {
 
 const AUTHOR_ID = 'eugenebox';
 const INITIAL_CAPITAL = 100;
-const FLY_SPEED = 0.013;
+const FLY_SPEED = 0.021;
 const TURN_SPEED = 0.00021;
-const TOUCH_TURN_SPEED = 0.0001;
-const GRAVITY = 0.0043333;
+const TOUCH_TURN_SPEED = 0.0002;
+const GRAVITY = 0.0055;
 const DAMPING_TURN = 0.99;
 const DAMPING_MOVE = 0.99;
 const PLANET_RADIUS = 1500;
 const PLANET_SHELL_THICKNESS = 18;
 const WATER_OUTER_OFFSET = 16;
-const WATER_INNER_OFFSET = 24;
+const WATER_INNER_OFFSET = 55;
 const WATER_THRUST_FACTOR = 0.55;
 const WATER_GRAVITY_FACTOR = 0.6;
 const WATER_DAMPING_MOVE = 0.945;
@@ -432,6 +432,16 @@ const RING_COOLDOWN_MS = 4000;
 const RING_ACTIVE_OPACITY = 0.9;
 const RING_FADED_OPACITY = 0.14;
 const LONG_PRESS_MS = 450;
+
+/* [PERF OPT] Pool of temporary objects for the animation loop */
+const _tmpVec1 = new THREE.Vector3();
+const _tmpVec2 = new THREE.Vector3();
+const _tmpVec3 = new THREE.Vector3();
+const _tmpVec4 = new THREE.Vector3();
+const _tmpVec5 = new THREE.Vector3();
+const _tmpQuat1 = new THREE.Quaternion();
+const _tmpQuat2 = new THREE.Quaternion();
+const _tmpEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 
 const memoryStore = {};
 const store = {
@@ -612,7 +622,6 @@ scene.add(player);
 camera.quaternion.setFromEuler(new THREE.Euler(0, 0, 0, 'YXZ'));
 player.add(camera);
 
-/* Invisible protective guard shell around camera focus so focus never enters solid terrain */
 const cameraGuardShellRadius = 2.6;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -620,7 +629,6 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 document.body.appendChild(renderer.domElement);
 
-/* Environment map so reflective shells reflect scene light cleanly */
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 const envScene = new THREE.Scene();
 envScene.background = new THREE.Color(0x0a0a12);
@@ -648,7 +656,6 @@ const rimLight = new THREE.DirectionalLight(0x7dd3fc, 0.75);
 rimLight.position.set(-1200, -1600, -900);
 scene.add(rimLight);
 
-/* Slow-moving external light sources: hidden behind planet body, light bounce through pass-through windows */
 const driftingExteriorLights = [
   {
     light: new THREE.PointLight(0xfff0c2, 2.2, 4200, 0),
@@ -693,6 +700,8 @@ const passThroughAnchors = [
   new THREE.Vector3(0, 0.7071, 0.7071).normalize(),
   new THREE.Vector3(0, -0.7071, -0.7071).normalize()
 ];
+/* [PERF OPT] Precompute cos(windowRadiusRad) for O(1) dot-based window test */
+const PASS_WINDOW_COS = Math.cos(0.24);
 
 const _tmpCamPos = new THREE.Vector3();
 const _tmpCamDir = new THREE.Vector3();
@@ -746,10 +755,6 @@ function updateDriftingExteriorLights(elapsedSec){
   }
 }
 
-/* =========================================================
-   BASE SHELL (GRID ONLY HERE), SHIMMERING REFRACTIVE WATER,
-   AND 100% OPAQUE SOLID TERRAIN
-   ========================================================= */
 function createBaseSurfaceGridMaterial(baseFillAlpha, gridAlpha, gridScale){
   return new THREE.ShaderMaterial({
     wireframe: false,
@@ -884,34 +889,33 @@ planetShellGroup.add(waterOuterMesh, waterInnerMesh);
 function isInWaterLayer(pos){
   const r = pos.length();
   if (r < 0.001) return false;
-  const dir = pos.clone().normalize();
-  const info = sampleTerrainAtDir(dir);
-  // Внутри замкнутого участка суши воды быть не должно
+  /* [PERF OPT] Pass pos directly, no clone (sampleTerrainAtDir no longer clones) */
+  _tmpVec1.copy(pos).divideScalar(r);
+  const info = sampleTerrainAtDir(_tmpVec1);
   if (!info.isPassThrough && r >= info.innerSolidR && r <= info.outerSolidR){
     return false;
   }
   return r >= waterInnerRadius && r <= waterOuterRadius;
 }
 
-/* =========================================================
-   PRONONOUNCED IRREGULAR SOLID TERRAIN (100% OPAQUE, NO GRID)
-   & PASS-THROUGH WINDOWS
-   ========================================================= */
 function sampleTerrainAtDir(dir){
-  const n = dir.clone().normalize();
-  const ridgeA = Math.sin(n.x * 5.0 + n.y * 3.0) * Math.cos(n.z * 4.0 - n.x * 2.0);
-  const ridgeB = Math.sin(n.y * 8.0 - n.z * 6.0) * 0.5;
+  /* [PERF OPT] No clone — assume input is normalized. Compute dot-based window test. */
+  const nx = dir.x, ny = dir.y, nz = dir.z;
+  const ridgeA = Math.sin(nx * 5.0 + ny * 3.0) * Math.cos(nz * 4.0 - nx * 2.0);
+  const ridgeB = Math.sin(ny * 8.0 - nz * 6.0) * 0.5;
   const landmass = ridgeA + ridgeB;
 
-  let minWindowAngle = Infinity;
-  for (const anchor of passThroughAnchors){
-    const ang = n.angleTo(anchor);
-    if (ang < minWindowAngle) minWindowAngle = ang;
+  let isPassThrough = false;
+  for (let i = 0; i < passThroughAnchors.length; i++){
+    const a = passThroughAnchors[i];
+    if (nx * a.x + ny * a.y + nz * a.z > PASS_WINDOW_COS){
+      isPassThrough = true;
+      break;
+    }
   }
-  const windowRadiusRad = 0.24;
 
-const surface1R = PLANET_RADIUS + Math.max(6, 18 + (landmass * 34.0) + (ridgeB * 14.0));
-const surface2R = Math.max(10, PLANET_RADIUS - Math.max(6, 18 - (-landmass * 32.0) - (ridgeA * 12.0)));
+  const surface1R = PLANET_RADIUS + Math.max(6, 18 + (landmass * 34.0) + (ridgeB * 14.0));
+  const surface2R = Math.max(10, PLANET_RADIUS - Math.max(6, 18 - (-landmass * 32.0) - (ridgeA * 12.0)));
   const vol1 = Math.max(0, surface1R - PLANET_RADIUS);
   const vol2 = Math.max(0, PLANET_RADIUS - surface2R);
   const s1Larger = vol1 >= vol2;
@@ -919,12 +923,9 @@ const surface2R = Math.max(10, PLANET_RADIUS - Math.max(6, 18 - (-landmass * 32.
   const isIntersectionOfSurfaces = Math.abs(surface1R - surface2R) < 22.0;
   const cutSmallerSide = isIntersectionOfSurfaces && (s1Larger ? (vol2 < vol1 * 0.95) : (vol1 < vol2 * 0.95));
 
-  const isPassThrough = minWindowAngle < windowRadiusRad || landmass < -0.35 || cutSmallerSide;
+  isPassThrough = isPassThrough || landmass < -0.35 || cutSmallerSide;
 
-  // Замыкаем оба слоя в единый объём: большая сторона задаёт внешний край,
-  // а внутренняя граница смыкается к ней / к базовому радиусу без зазора с водой
-const closedR = s1Larger ? surface1R : surface2R;
-
+  const closedR = s1Larger ? surface1R : surface2R;
   let outerSolidR = closedR;
   let innerSolidR = closedR;
 
@@ -933,11 +934,7 @@ const closedR = s1Larger ? surface1R : surface2R;
     innerSolidR = PLANET_RADIUS - 32;
   }
 
-  return {
-    isPassThrough,
-    innerSolidR,
-    outerSolidR
-  };
+  return { isPassThrough, innerSolidR, outerSolidR };
 }
 
 function buildDisplacedShellGeometry(radius, segW, segH, useOuterSide){
@@ -946,12 +943,12 @@ function buildDisplacedShellGeometry(radius, segW, segH, useOuterSide){
   const v = new THREE.Vector3();
   for (let i = 0; i < posAttr.count; i++){
     v.fromBufferAttribute(posAttr, i);
-    const dir = v.clone().normalize();
-const info = sampleTerrainAtDir(dir);
-const targetR = info.isPassThrough
-  ? (useOuterSide ? PLANET_RADIUS - 24 : PLANET_RADIUS - 32)
-  : (useOuterSide ? info.outerSolidR : info.innerSolidR);
-    v.copy(dir).multiplyScalar(targetR);
+    v.normalize();
+    const info = sampleTerrainAtDir(v);
+    const targetR = info.isPassThrough
+      ? (useOuterSide ? PLANET_RADIUS - 24 : PLANET_RADIUS - 32)
+      : (useOuterSide ? info.outerSolidR : info.innerSolidR);
+    v.multiplyScalar(targetR);
     posAttr.setXYZ(i, v.x, v.y, v.z);
   }
   posAttr.needsUpdate = true;
@@ -984,7 +981,7 @@ solidTerrainMat.onBeforeCompile = (shader) => {
        vCutWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`
     );
 
-shader.fragmentShader = shader.fragmentShader
+  shader.fragmentShader = shader.fragmentShader
     .replace(
       '#include <common>',
       `#include <common>
@@ -998,11 +995,11 @@ shader.fragmentShader = shader.fragmentShader
        float ridgeB = sin(n.y * 8.0 - n.z * 6.0) * 0.5;
        float landmass = ridgeA + ridgeB;
 
-float surface1R = 1500.0 + max(6.0, 18.0 + (landmass * 34.0) + (ridgeB * 14.0));
-float surface2R = max(10.0, 1500.0 - max(6.0, 18.0 - (-landmass * 32.0) - (ridgeA * 12.0)));       float vol1 = max(0.0, surface1R - 1500.0);
+       float surface1R = 1500.0 + max(6.0, 18.0 + (landmass * 34.0) + (ridgeB * 14.0));
+       float surface2R = max(10.0, 1500.0 - max(6.0, 18.0 - (-landmass * 32.0) - (ridgeA * 12.0)));
+       float vol1 = max(0.0, surface1R - 1500.0);
        float vol2 = max(0.0, 1500.0 - surface2R);
        bool s1Larger = vol1 >= vol2;
-
        bool isIntersectionOfSurfaces = abs(surface1R - surface2R) < 22.0;
        bool cutSmallerSide = isIntersectionOfSurfaces && (s1Larger ? (vol2 < vol1 * 0.95) : (vol1 < vol2 * 0.95));
 
@@ -1013,13 +1010,10 @@ float surface2R = max(10.0, 1500.0 - max(6.0, 18.0 - (-landmass * 32.0) - (ridge
       `float rPos = length(vCutWorldPos);
        float aboveMask = smoothstep(1512.0, 1516.0, rPos);
        float belowMask = 1.0 - smoothstep(1484.0, 1488.0, rPos);
-
        float softGrain = 0.96 + 0.04 * sin(vCutWorldPos.x * 0.25) * cos(vCutWorldPos.z * 0.25);
-
        vec3 aboveLand = vec3(0.46, 0.39, 0.30) * softGrain;
        vec3 belowLand = vec3(0.05, 0.13, 0.24) * softGrain;
        vec3 midBand   = vec3(0.14, 0.26, 0.40) * softGrain;
-
        vec3 targetCol = mix(midBand, aboveLand, aboveMask);
        targetCol = mix(targetCol, belowLand, belowMask);
        gl_FragColor.rgb = mix(gl_FragColor.rgb, targetCol, 0.55);
@@ -1034,8 +1028,9 @@ planetShellGroup.add(solidOuterMesh, solidInnerMesh);
 function resolveSolidTerrainCollision(pos, vel, clearance = 0.45){
   const r = pos.length();
   if (r < 0.001) return false;
-  const dir = pos.clone().normalize();
-  const info = sampleTerrainAtDir(dir);
+  /* [PERF OPT] Use pooled vector + fill directly */
+  _tmpVec2.copy(pos).divideScalar(r);
+  const info = sampleTerrainAtDir(_tmpVec2);
   if (info.isPassThrough) return false;
 
   const paddedOuter = info.outerSolidR + clearance;
@@ -1044,11 +1039,8 @@ function resolveSolidTerrainCollision(pos, vel, clearance = 0.45){
   if (r <= paddedOuter && r >= paddedInner){
     const distToOuter = paddedOuter - r;
     const distToInner = r - paddedInner;
-    if (distToOuter <= distToInner){
-      pos.copy(dir).multiplyScalar(paddedOuter);
-    } else {
-      pos.copy(dir).multiplyScalar(paddedInner);
-    }
+    const targetR = distToOuter <= distToInner ? paddedOuter : paddedInner;
+    pos.copy(_tmpVec2).multiplyScalar(targetR);
     vel.set(0, 0, 0);
     return true;
   }
@@ -1058,8 +1050,8 @@ function resolveSolidTerrainCollision(pos, vel, clearance = 0.45){
 function guardCameraFocusAgainstTerrain(camWorldPos){
   const r = camWorldPos.length();
   if (r < 0.001) return;
-  const dir = camWorldPos.clone().normalize();
-  const info = sampleTerrainAtDir(dir);
+  _tmpVec3.copy(camWorldPos).divideScalar(r);
+  const info = sampleTerrainAtDir(_tmpVec3);
   if (info.isPassThrough) return;
 
   const guardOuter = info.outerSolidR + cameraGuardShellRadius;
@@ -1068,14 +1060,10 @@ function guardCameraFocusAgainstTerrain(camWorldPos){
     const distToOuter = guardOuter - r;
     const distToInner = r - guardInner;
     const safeR = distToOuter <= distToInner ? guardOuter : guardInner;
-    camWorldPos.copy(dir).multiplyScalar(safeR);
+    camWorldPos.copy(_tmpVec3).multiplyScalar(safeR);
   }
 }
 
-/* =========================================================
-   SIX DIRECTIONS — ARCHITECTURAL CENTERS ON BOTH SIDES,
-   GROWING AS BUILDINGS INCREASE
-   ========================================================= */
 const collidableObjects = [...planetShellMeshes, solidOuterMesh, solidInnerMesh];
 const linePalette = [0x38bdf8, 0xf472b6, 0xfbbf24, 0x4ade80, 0xc084fc, 0xfb7185];
 
@@ -1115,19 +1103,22 @@ sixDirections.forEach((_, dirIndex) => {
 const centerObjects = [];
 const animatedGyroParts = [];
 
+/* [PERF OPT] Shared materials for arches (huge win on draw-call reduction) */
+const sharedArchMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.55, metalness: 0.35 });
+const sharedAccentMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+const sharedEdgeMats = linePalette.map(c => new THREE.LineBasicMaterial({ color: c }));
+
 function addArchAccentToParent(parent, archType, yOffset, scale, colorHex, registerAnim = false){
-  const mat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.55, metalness: 0.35 });
-  const edgeMat = new THREE.LineBasicMaterial({ color: colorHex });
-  const accentMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+  const edgeMat = sharedEdgeMats[linePalette.indexOf(colorHex)] || sharedEdgeMats[0];
   const holder = new THREE.Group();
   holder.position.set(0, yOffset, 0);
   holder.scale.setScalar(scale);
 
   function part(geo, lx, ly, lz, rx = 0, ry = 0, rz = 0, accent = false){
-    const m = new THREE.Mesh(geo, mat);
+    const m = new THREE.Mesh(geo, sharedArchMat);
     m.position.set(lx, ly, lz);
     m.rotation.set(rx, ry, rz);
-    m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 20), accent ? accentMat : edgeMat));
+    m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 20), accent ? sharedAccentMat : edgeMat));
     holder.add(m);
     return m;
   }
@@ -1211,7 +1202,8 @@ function getNearestCenterSpec(pos){
 
 let lastCentersUpdateMs = 0;
 function updateCentersInfluence(nowMs){
-  if (nowMs - lastCentersUpdateMs < 90) return;
+  /* [PERF OPT] Slower throttle (was 90ms) */
+  if (nowMs - lastCentersUpdateMs < 300) return;
   lastCentersUpdateMs = nowMs;
 
   const totalBuildings = buildings.length;
@@ -1229,8 +1221,10 @@ function updateCentersInfluence(nowMs){
       const dx = b.x - c.cPos.x;
       const dy = b.y - c.cPos.y;
       const dz = b.z - c.cPos.z;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      const proximity = dist <= c.spec.influenceRadius ? (1.25 - dist / c.spec.influenceRadius) : 0.35;
+      /* [PERF OPT] Compare squared distance first, sqrt only inside branch */
+      const distSq = dx * dx + dy * dy + dz * dz;
+      const R2 = c.spec.influenceRadius * c.spec.influenceRadius;
+      const proximity = distSq <= R2 ? (1.25 - Math.sqrt(distSq) / c.spec.influenceRadius) : 0.35;
       const housePower = 1 + (b.storedTokens || 0) * 0.45 + ((b.tier || 1) - 1) * 1.2;
       score += proximity * housePower;
     }
@@ -1246,7 +1240,7 @@ function updateCentersInfluence(nowMs){
 }
 
 /* =========================================================
-   MORE RINGS FARTHER FROM SURFACE ON BOTH SIDES
+   RINGS
    ========================================================= */
 const routeRings = [];
 const ringGeo = new THREE.TorusGeometry(18, 1.1, 12, 32);
@@ -1298,7 +1292,8 @@ ringBands.forEach((band) => {
       mesh.quaternion.copy(makeVerticalRingQuaternion(dir, tangentHeading));
       scene.add(mesh);
 
-      routeRings.push({ mesh, mat, cooldownUntil: 0 });
+      /* [PERF OPT] needsFadeUpdate flag to avoid touching materials every frame */
+      routeRings.push({ mesh, mat, cooldownUntil: 0, needsFadeUpdate: false });
       ringIdxCounter++;
     }
   }
@@ -1306,22 +1301,27 @@ ringBands.forEach((band) => {
 
 function updateRouteRingsFade(nowMs){
   for (const ring of routeRings){
-    if (nowMs < ring.cooldownUntil){
-      const remainingRatio = Math.max(0, Math.min(1, (ring.cooldownUntil - nowMs) / RING_COOLDOWN_MS));
-      const recovery = 1 - remainingRatio;
-      ring.mat.opacity = RING_FADED_OPACITY + (RING_ACTIVE_OPACITY - RING_FADED_OPACITY) * (recovery * recovery);
-    } else {
-      ring.mat.opacity = RING_ACTIVE_OPACITY;
+    if (ring.needsFadeUpdate){
+      if (nowMs < ring.cooldownUntil){
+        const remainingRatio = Math.max(0, Math.min(1, (ring.cooldownUntil - nowMs) / RING_COOLDOWN_MS));
+        const recovery = 1 - remainingRatio;
+        ring.mat.opacity = RING_FADED_OPACITY + (RING_ACTIVE_OPACITY - RING_FADED_OPACITY) * (recovery * recovery);
+      } else {
+        ring.mat.opacity = RING_ACTIVE_OPACITY;
+        ring.needsFadeUpdate = false;
+      }
     }
   }
 }
 
 /* =========================================================
-   HOUSES ON PLAYER SIDE, NO OVERLAPS, ROOF ACCENTS & BRIDGES/ARCHES
+   HOUSES
    ========================================================= */
 const buildingsGroup = new THREE.Group();
 scene.add(buildingsGroup);
 const buildingMeshes = new Map();
+/* [PERF OPT] O(1) lookup map */
+const buildingById = new Map();
 
 function getHouseHeight(b){
   const invested = Math.max(0, (b.storedTokens || 0) + ((b.tier || 1) - 1) * 2);
@@ -1357,10 +1357,26 @@ function getSurfaceSupportRadius(dir, side, ignoreId = null){
   return topR;
 }
 
+/* [PERF OPT] Shared house material + cached EdgesGeometry templates */
+const sharedHouseMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 });
+const houseEdgeMatCache = new Map();
+function getHouseEdgeMaterial(color){
+  if (!houseEdgeMatCache.has(color)){
+    houseEdgeMatCache.set(color, new THREE.LineBasicMaterial({ color }));
+  }
+  return houseEdgeMatCache.get(color);
+}
+
 function upsertBuildingMesh(b){
-  const idx = buildings.findIndex(item => item.id === b.id);
-  if (idx >= 0) buildings[idx] = b;
-  else buildings.push(b);
+  const existing = buildingById.get(b.id);
+  if (existing) existing.storedTokens = b.storedTokens;
+  else {
+    buildingById.set(b.id, b);
+    buildings.push(b);
+  }
+  /* keep passed object in sync with store when remote update arrives */
+  const canonical = buildingById.get(b.id);
+  Object.assign(canonical, b);
 
   if (buildingMeshes.has(b.id)){
     const old = buildingMeshes.get(b.id);
@@ -1383,10 +1399,7 @@ function upsertBuildingMesh(b){
   const flushBase = dir.clone().multiplyScalar(actualR);
 
   const boxGeo = new THREE.BoxGeometry(span, h, depth);
-  const houseMesh = new THREE.Mesh(
-    boxGeo,
-    new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 })
-  );
+  const houseMesh = new THREE.Mesh(boxGeo, sharedHouseMat);
   houseMesh.position.copy(flushBase).addScaledVector(up, h * 0.5);
 
   const alignQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
@@ -1412,7 +1425,7 @@ function upsertBuildingMesh(b){
 
   const outlineCol = b.color || linePalette[buildings.length % linePalette.length];
   const edges = new THREE.EdgesGeometry(boxGeo);
-  const lineMesh = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: outlineCol }));
+  const lineMesh = new THREE.LineSegments(edges, getHouseEdgeMaterial(outlineCol));
   houseMesh.add(lineMesh);
 
   const nearestCenter = getNearestCenterSpec(flushBase);
@@ -1434,7 +1447,8 @@ function doesOverlapExistingBuilding(candidatePos, candidateRadius, ignoreId = n
     const bH = getHouseHeight(b);
     const bCenter = bPos.clone().addScaledVector(bUp, bH * 0.5);
     const minSep = candidateRadius + Math.max(4.5, bH * 0.45);
-    if (candidatePos.distanceTo(bCenter) < minSep){
+    /* [PERF OPT] distanceToSquared */
+    if (candidatePos.distanceToSquared(bCenter) < minSep * minSep){
       return true;
     }
   }
@@ -1453,13 +1467,12 @@ function getAimedWorldPoint(){
   camera.updateMatrixWorld();
   aimRaycaster.setFromCamera(ndc, camera);
 
-  const camPos = camera.getWorldPosition(new THREE.Vector3());
-  const rayDir = aimRaycaster.ray.direction.clone().normalize();
+  const camPos = camera.getWorldPosition(_tmpVec4);
+  const rayDir = aimRaycaster.ray.direction;
   const playerSide = player.position.length() < PLANET_RADIUS ? -1 : 1;
 
-  const oc = camPos.clone();
-  const b = oc.dot(rayDir);
-  const c = oc.lengthSq() - PLANET_RADIUS * PLANET_RADIUS;
+  const b = camPos.dot(rayDir);
+  const c = camPos.lengthSq() - PLANET_RADIUS * PLANET_RADIUS;
   const disc = b * b - c;
 
   if (disc >= 0){
@@ -1468,10 +1481,10 @@ function getAimedWorldPoint(){
     const tFar = -b + sqrtDisc;
 
     if (playerSide === 1){
-      if (tNear > 0.1) return camPos.clone().addScaledVector(rayDir, tNear);
-      if (tFar > 0.1) return camPos.clone().addScaledVector(rayDir, tFar);
+      if (tNear > 0.1) return _tmpVec5.copy(camPos).addScaledVector(rayDir, tNear).clone();
+      if (tFar > 0.1) return _tmpVec5.copy(camPos).addScaledVector(rayDir, tFar).clone();
     } else {
-      if (tFar > 0.1) return camPos.clone().addScaledVector(rayDir, tFar);
+      if (tFar > 0.1) return _tmpVec5.copy(camPos).addScaledVector(rayDir, tFar).clone();
     }
   }
 
@@ -1587,7 +1600,7 @@ const backgroundPlanets = [];
 });
 
 /* =========================================================
-   MQTT MULTIPLAYER, CRYSTAL REFLECTIVE PEER SHELL + HORIZONTAL NEON NAMES
+   MQTT MULTIPLAYER
    ========================================================= */
 const BROKER = 'wss://broker.emqx.io:8084/mqtt';
 const TOPIC = 'outside_in_planet/megacity/v1';
@@ -1595,6 +1608,8 @@ let mqttClient = null;
 const remotePeers = new Map();
 let activeRemoteAttacks = {};
 let hasMovedFromOrigin = false;
+/* [PERF OPT] Only publish STATE when position actually changed */
+let lastPublishedPos = { x: 0, y: 0, z: 0 };
 
 function createPeerSubjectGroup(labelText){
   const group = new THREE.Group();
@@ -1651,18 +1666,17 @@ function getOrCreateRemotePeer(id){
 function updatePeerLabelsScreenPosition(){
   const w = window.innerWidth;
   const h = window.innerHeight;
-  const anchorWorld = new THREE.Vector3();
 
   for (const entry of remotePeers.values()){
-    anchorWorld.copy(entry.mesh.position);
-    const r = anchorWorld.length();
+    _tmpVec1.copy(entry.mesh.position);
+    const r = _tmpVec1.length();
     if (r > 0.001){
-      anchorWorld.addScaledVector(anchorWorld.clone().normalize(), 4.2);
+      _tmpVec1.multiplyScalar(1 + 4.2 / r);
     } else {
-      anchorWorld.y += 4.2;
+      _tmpVec1.y += 4.2;
     }
 
-    const projected = anchorWorld.clone().project(camera);
+    const projected = _tmpVec1.clone().project(camera);
     const visible = projected.z >= -1 && projected.z <= 1;
     if (!visible){
       entry.tagEl.style.display = 'none';
@@ -1742,7 +1756,7 @@ try{
       upsertBuildingMesh(data.building);
       store.set('buildings', buildings);
     } else if (data.type === 'BUILDING_LOOTED'){
-      const b = buildings.find(item => item.id === data.buildingId);
+      const b = buildingById.get(data.buildingId);
       if (b){
         b.storedTokens = Math.max(0, (b.storedTokens || 0) - data.amount);
         upsertBuildingMesh(b);
@@ -1768,10 +1782,19 @@ try{
 
 setInterval(() => {
   if (hasMovedFromOrigin && player.position.lengthSq() > 0.01){
-    publishMqtt({
-      type: 'STATE',
-      pos: [Number(player.position.x.toFixed(2)), Number(player.position.y.toFixed(2)), Number(player.position.z.toFixed(2))]
-    });
+    /* [PERF OPT] Don't spam STATE if position hasn't moved */
+    const dx = player.position.x - lastPublishedPos.x;
+    const dy = player.position.y - lastPublishedPos.y;
+    const dz = player.position.z - lastPublishedPos.z;
+    if (dx * dx + dy * dy + dz * dz > 1.0){
+      publishMqtt({
+        type: 'STATE',
+        pos: [Number(player.position.x.toFixed(2)), Number(player.position.y.toFixed(2)), Number(player.position.z.toFixed(2))]
+      });
+      lastPublishedPos.x = player.position.x;
+      lastPublishedPos.y = player.position.y;
+      lastPublishedPos.z = player.position.z;
+    }
   }
   updatePresenceUI();
 }, 1500);
@@ -1799,8 +1822,7 @@ peerIdInput.addEventListener('blur', () => {
 });
 
 /* =========================================================
-   RETICLE: TAP ONLY TOGGLES MENU; EXPLICIT CLICK SELECTS MODE;
-   LONG-PRESS ACTIVATES SELECTED MODE
+   RETICLE
    ========================================================= */
 let selectedReticleMode = 'build';
 let menuOpenedAt = 0;
@@ -1909,20 +1931,26 @@ function applyFreezeToSelf(durationMs){
 }
 
 function findNearestBuilding(fromPos, maxDist = 35){
-  let best = null, bestD = maxDist;
+  let best = null;
+  /* [PERF OPT] Compare squared distances */
+  let bestDSq = maxDist * maxDist;
   for (const b of buildings){
-    const d = fromPos.distanceTo(new THREE.Vector3(b.x, b.y, b.z));
-    if (d < bestD){ bestD = d; best = b; }
+    const dx = fromPos.x - b.x;
+    const dy = fromPos.y - b.y;
+    const dz = fromPos.z - b.z;
+    const dSq = dx * dx + dy * dy + dz * dz;
+    if (dSq < bestDSq){ bestDSq = dSq; best = b; }
   }
   return best;
 }
 
 function findNearestPeer(maxDist = 65){
-  let bestId = null, bestD = maxDist;
+  let bestId = null;
+  let bestDSq = maxDist * maxDist;
   for (const [pid, entry] of remotePeers.entries()){
-    const d = player.position.distanceTo(entry.mesh.position);
-    if (d < bestD){
-      bestD = d;
+    const dSq = player.position.distanceToSquared(entry.mesh.position);
+    if (dSq < bestDSq){
+      bestDSq = dSq;
       bestId = pid;
     }
   }
@@ -2059,10 +2087,10 @@ attackBtn.addEventListener('pointermove', (e) => {
     closeReticleMenu();
     const nx = Math.max(8, Math.min(window.innerWidth - 64, e.clientX - btnDrag.ox));
     const ny = Math.max(44, Math.min(window.innerHeight - 104, e.clientY - btnDrag.oy));
-    reticleWrap.style.left = nx + 'px';
-    reticleWrap.style.top = ny + 'px';
-    reticleWrap.style.right = 'auto';
-    reticleWrap.style.bottom = 'auto';
+    reticleWrapEl.style.left = nx + 'px';
+    reticleWrapEl.style.top = ny + 'px';
+    reticleWrapEl.style.right = 'auto';
+    reticleWrapEl.style.bottom = 'auto';
   }
 });
 
@@ -2084,7 +2112,7 @@ attackBtn.addEventListener('pointerup', onReticleRelease);
 attackBtn.addEventListener('pointercancel', onReticleRelease);
 
 /* =========================================================
-   STATS MODAL (TIMEFRAMES + TOUCH SCROLL ON CHART + WITHDRAW)
+   STATS MODAL
    ========================================================= */
 const statsModal = document.getElementById('statsModal');
 const statsCard = statsModal.querySelector('.modal-card');
@@ -2358,8 +2386,7 @@ document.getElementById('helpBtn').addEventListener('click', () => helpModal.cla
 document.getElementById('closeHelpBtn').addEventListener('click', () => helpModal.classList.remove('show'));
 
 /* =========================================================
-   FLIGHT PHYSICS: LINEAR SPEED, ZERO GRAVITY AT CENTER &
-   MATCHING OUTER HEIGHT, WATER DENSITY & SOLID TERRAIN
+   FLIGHT PHYSICS
    ========================================================= */
 let velocity = new THREE.Vector3(0, 0, 0);
 let angularVelocityX = 0;
@@ -2368,35 +2395,39 @@ const clock = new THREE.Clock();
 let elapsedTimeSec = 0;
 
 const OUTER_ZERO_GRAVITY_RADIUS = PLANET_RADIUS + 1200;
+/* [PERF OPT] Reusable gravity result vector */
+const _gravityVec = new THREE.Vector3();
 
-function computeGravity(pos, inWater = false){
+function computeGravity(pos, inWater, outVec){
   const r = pos.length();
-  if (r < 0.001) return new THREE.Vector3(0, 0, 0);
-  if (r >= OUTER_ZERO_GRAVITY_RADIUS) return new THREE.Vector3(0, 0, 0);
-
-  const dir = pos.clone().normalize();
+  if (r < 0.001 || r >= OUTER_ZERO_GRAVITY_RADIUS){
+    outVec.set(0, 0, 0);
+    return outVec;
+  }
+  outVec.copy(pos).divideScalar(r);
   const innerZeroMask = THREE.MathUtils.smoothstep(r, 0, 260);
   const outerZeroMask = 1.0 - THREE.MathUtils.smoothstep(r, OUTER_ZERO_GRAVITY_RADIUS - 320, OUTER_ZERO_GRAVITY_RADIUS);
   const waterScale = inWater ? WATER_GRAVITY_FACTOR : 1.0;
   const g = GRAVITY * innerZeroMask * outerZeroMask * waterScale;
-  return r < PLANET_RADIUS ? dir.multiplyScalar(g) : dir.multiplyScalar(-g);
+  outVec.multiplyScalar(r < PLANET_RADIUS ? g : -g);
+  return outVec;
 }
 
 function applyPendulumSelfLeveling(hasControlInput, gravityVec){
   if (hasControlInput) return;
-  if (!gravityVec || gravityVec.lengthSq() < 1e-10) return;
+  if (gravityVec.lengthSq() < 1e-10) return;
 
-  const localDown = gravityVec.clone().normalize();
-  const targetUp = localDown.clone().negate();
-
-  const currentUp = new THREE.Vector3(0, 1, 0).applyQuaternion(player.quaternion).normalize();
-  const alignQuat = new THREE.Quaternion().setFromUnitVectors(currentUp, targetUp);
+  /* [PERF OPT] No allocations — reuse tmp vectors */
+  _tmpVec1.copy(gravityVec).normalize();
+  _tmpVec2.copy(_tmpVec1).negate();
+  _tmpVec3.set(0, 1, 0).applyQuaternion(player.quaternion).normalize();
+  _tmpQuat1.setFromUnitVectors(_tmpVec3, _tmpVec2);
 
   const gravStrength = Math.min(1, gravityVec.length() / Math.max(GRAVITY, 1e-6));
   const stepFactor = 0.0055 * gravStrength;
 
-  const stepQuat = new THREE.Quaternion().slerp(alignQuat, stepFactor);
-  player.quaternion.premultiply(stepQuat);
+  _tmpQuat2.identity().slerp(_tmpQuat1, stepFactor);
+  player.quaternion.premultiply(_tmpQuat2);
 
   angularVelocityX *= 0.985;
   angularVelocityZ *= 0.985;
@@ -2411,7 +2442,7 @@ function updateHoldActions(nowMs){
     if (step > lastDepositStep && tokens >= 1){
       lastDepositStep = step;
       recordTokenDelta(-1, 'Stock house', true);
-      const b = buildings.find(item => item.id === targetBuildingId);
+      const b = buildingById.get(targetBuildingId);
       if (b){
         b.storedTokens = (b.storedTokens || 0) + 1;
         upsertBuildingMesh(b);
@@ -2425,7 +2456,7 @@ function updateHoldActions(nowMs){
       const drainStep = Math.floor((elapsed - warningMs) / 700);
       if (drainStep > lastDrainStep){
         lastDrainStep = drainStep;
-        const b = buildings.find(item => item.id === targetBuildingId);
+        const b = buildingById.get(targetBuildingId);
         if (b && (b.storedTokens || 0) > 0){
           b.storedTokens -= 1;
           upsertBuildingMesh(b);
@@ -2439,7 +2470,7 @@ function updateHoldActions(nowMs){
     }
   } else if (holdMode === 'hack_peer' && targetPeerId){
     const peerEntry = remotePeers.get(targetPeerId);
-    if (!peerEntry || player.position.distanceTo(peerEntry.mesh.position) > 85){
+    if (!peerEntry || player.position.distanceToSquared(peerEntry.mesh.position) > 85 * 85){
       stopHoldAction();
       return;
     }
@@ -2452,124 +2483,8 @@ function updateHoldActions(nowMs){
   }
 }
 
-function animate(){
-  requestAnimationFrame(animate);
-  const dt = Math.min(0.05, clock.getDelta());
-  elapsedTimeSec += dt;
-  waterTimeUniform.value += dt;
-  updateDriftingExteriorLights(elapsedTimeSec);
-
-  const nowMs = performance.now();
-  const inWater = isInWaterLayer(player.position);
-  let hasControlInput = false;
-
-if (Date.now() >= frozenUntil){
-    if (keys['ArrowLeft']){ angularVelocityZ += TURN_SPEED; hasControlInput = true; }
-    if (keys['ArrowRight']){ angularVelocityZ -= TURN_SPEED; hasControlInput = true; }
-    if (keys['ArrowUp']){ angularVelocityX -= TURN_SPEED; hasControlInput = true; }
-    if (keys['ArrowDown']){ angularVelocityX += TURN_SPEED; hasControlInput = true; }
-
-    if (touchJoystick.active && (Math.abs(touchJoystick.moveX) > 0.02 || Math.abs(touchJoystick.moveY) > 0.02)){
-      angularVelocityX += touchJoystick.moveY * TOUCH_TURN_SPEED;
-      angularVelocityZ -= touchJoystick.moveX * TOUCH_TURN_SPEED;
-      hasControlInput = true;
-    }
-
-    angularVelocityX *= DAMPING_TURN;
-    angularVelocityZ *= DAMPING_TURN;
-
-    const deltaQuaternion = new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(angularVelocityX, 0, angularVelocityZ, 'YXZ')
-    );
-    player.quaternion.multiply(deltaQuaternion);
-
-    const thrustScale = inWater ? WATER_THRUST_FACTOR : 1.0;
-    let signedThrust = 0;
-    if (keys['Space']){
-      signedThrust = FLY_SPEED * (superThrust ? 2.0 : 1.0) * thrustScale;
-      hasControlInput = true;
-    } else if (keys['KeyB']){
-      signedThrust = -FLY_SPEED * (superThrust ? 2.0 : 1.0) * thrustScale;
-      hasControlInput = true;
-    } else if (Math.abs(currentThrottle) > 0.02){
-      signedThrust = FLY_SPEED * currentThrottle * thrustScale;
-      hasControlInput = true;
-    }
-
-    const localUp = new THREE.Vector3(0, 1, 0).applyQuaternion(player.quaternion);
-    if (isReverseThrust) localUp.negate();
-
-    if (Math.abs(signedThrust) > 0){
-      velocity.add(localUp.multiplyScalar(signedThrust));
-    }
-  } else {
-    angularVelocityX *= 0.85;
-    angularVelocityZ *= 0.85;
-  }
-
-const gravityVec = computeGravity(player.position, inWater);
-  applyPendulumSelfLeveling(hasControlInput, gravityVec);
-  velocity.add(gravityVec);  velocity.multiplyScalar(inWater ? WATER_DAMPING_MOVE : DAMPING_MOVE);
-  player.position.add(velocity);
-  if (!hasControlInput && Date.now() >= frozenUntil){
-    const rNow = player.position.length();
-    const minFreeGap = 6.0;
-    if (rNow > 0.001 && Math.abs(rNow - PLANET_RADIUS) < minFreeGap){
-      const dirNow = player.position.clone().normalize();
-      const pushOut = rNow >= PLANET_RADIUS;
-      const safeR = pushOut ? (PLANET_RADIUS + minFreeGap) : (PLANET_RADIUS - minFreeGap);
-      player.position.copy(dirNow).multiplyScalar(safeR);
-
-      const radialVel = velocity.dot(dirNow);
-      if (pushOut && radialVel < 0){
-        velocity.addScaledVector(dirNow, -radialVel);
-      } else if (!pushOut && radialVel > 0){
-        velocity.addScaledVector(dirNow, -radialVel);
-      }
-    }
-  }
-  resolveSolidTerrainCollision(player.position, velocity, 0.5);
-
-  if (player.position.lengthSq() > 0.25){
-    hasMovedFromOrigin = true;
-  }
-
-  /* Invisible guard shell around camera focus so camera focus never enters solid terrain */
-  player.updateMatrixWorld();
-  camera.updateMatrixWorld();
-  const camWorldPos = camera.getWorldPosition(new THREE.Vector3());
-  const beforeGuardPos = camWorldPos.clone();
-  guardCameraFocusAgainstTerrain(camWorldPos);
-  if (camWorldPos.distanceToSquared(beforeGuardPos) > 1e-8){
-    player.position.add(camWorldPos.sub(beforeGuardPos));
-  }
-
-  for (const item of animatedGyroParts){
-    item.obj.rotation.z += item.speed;
-  }
-
-  for (const ring of routeRings){
-    if (nowMs >= ring.cooldownUntil && player.position.distanceTo(ring.mesh.position) < 19){
-      ring.cooldownUntil = nowMs + RING_COOLDOWN_MS;
-      ring.mat.opacity = RING_FADED_OPACITY;
-      recordTokenDelta(2, 'Route ring', false);
-    }
-  }
-
-  updateRouteRingsFade(nowMs);
-  updateCentersInfluence(nowMs);
-  updateHoldActions(nowMs);
-  updatePeerLabelsScreenPosition();
-
-  backgroundPlanets.forEach(planet => {
-    planet.mesh.rotation.y += planet.rotSpeed;
-    planet.mesh.rotation.x += planet.rotSpeed * 0.2;
-  });
-
-  renderer.render(scene, camera);
-}
 /* =========================================================
-   WIRE / SOLID RENDER MODE TOGGLE
+   WIRE / SOLID TOGGLE
    ========================================================= */
 let wireframeMode = store.get('wire_mode', false);
 
@@ -2580,7 +2495,6 @@ function collectWireframeTargets(){
     const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
     const usable = mats.filter(m => m && 'wireframe' in m && !m.isShaderMaterial);
     if (!usable.length) return;
-    // Пропускаем прозрачные стеклянные оболочки (peer-сферы) — wireframe там бессмысленен
     if (usable.every(m => m.transparent && m.opacity < 0.05)) return;
     meshes.push(obj);
   });
@@ -2597,7 +2511,6 @@ function applyWireframeMode(enable){
       m.needsUpdate = true;
     });
   });
-  // Скрываем линейные оверлеи (рёбра зданий, акценты арок) — иначе двойной контур
   scene.traverse(obj => {
     if (obj.isLineSegments) obj.visible = !wireframeMode;
   });
@@ -2611,6 +2524,134 @@ wireToggleBtn.addEventListener('click', () => {
 });
 
 applyWireframeMode(wireframeMode);
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(0.05, clock.getDelta());
+  elapsedTimeSec += dt;
+  waterTimeUniform.value += dt;
+  updateDriftingExteriorLights(elapsedTimeSec);
+
+  const nowMs = performance.now();
+  const inWater = isInWaterLayer(player.position);
+  let hasControlInput = false;
+
+  if (Date.now() >= frozenUntil){
+    if (keys['ArrowLeft']){ angularVelocityZ += TURN_SPEED; hasControlInput = true; }
+    if (keys['ArrowRight']){ angularVelocityZ -= TURN_SPEED; hasControlInput = true; }
+    if (keys['ArrowUp']){ angularVelocityX -= TURN_SPEED; hasControlInput = true; }
+    if (keys['ArrowDown']){ angularVelocityX += TURN_SPEED; hasControlInput = true; }
+
+    if (touchJoystick.active && (Math.abs(touchJoystick.moveX) > 0.02 || Math.abs(touchJoystick.moveY) > 0.02)){
+      angularVelocityX += touchJoystick.moveY * TOUCH_TURN_SPEED;
+      angularVelocityZ -= touchJoystick.moveX * TOUCH_TURN_SPEED;
+      hasControlInput = true;
+    }
+
+    angularVelocityX *= DAMPING_TURN;
+    angularVelocityZ *= DAMPING_TURN;
+
+    /* [PERF OPT] No allocations — reuse _tmpEuler and _tmpQuat1 */
+    _tmpEuler.set(angularVelocityX, 0, angularVelocityZ);
+    _tmpQuat1.setFromEuler(_tmpEuler);
+    player.quaternion.multiply(_tmpQuat1);
+
+    const thrustScale = inWater ? WATER_THRUST_FACTOR : 1.0;
+    let signedThrust = 0;
+    if (keys['Space']){
+      signedThrust = FLY_SPEED * (superThrust ? 2.0 : 1.0) * thrustScale;
+      hasControlInput = true;
+    } else if (keys['KeyB']){
+      signedThrust = -FLY_SPEED * (superThrust ? 2.0 : 1.0) * thrustScale;
+      hasControlInput = true;
+    } else if (Math.abs(currentThrottle) > 0.02){
+      signedThrust = FLY_SPEED * currentThrottle * thrustScale;
+      hasControlInput = true;
+    }
+
+    /* [PERF OPT] localUp reuse _tmpVec1 */
+    _tmpVec1.set(0, 1, 0).applyQuaternion(player.quaternion);
+    if (isReverseThrust) _tmpVec1.negate();
+
+    if (Math.abs(signedThrust) > 0){
+      velocity.addScaledVector(_tmpVec1, signedThrust);
+    }
+  } else {
+    angularVelocityX *= 0.85;
+    angularVelocityZ *= 0.85;
+  }
+
+  computeGravity(player.position, inWater, _gravityVec);
+  applyPendulumSelfLeveling(hasControlInput, _gravityVec);
+  velocity.add(_gravityVec);
+  velocity.multiplyScalar(inWater ? WATER_DAMPING_MOVE : DAMPING_MOVE);
+  player.position.add(velocity);
+  if (!hasControlInput && Date.now() >= frozenUntil){
+    const rNow = player.position.length();
+    const minFreeGap = 6.0;
+    if (rNow > 0.001 && Math.abs(rNow - PLANET_RADIUS) < minFreeGap){
+      /* [PERF OPT] reuse _tmpVec2 */
+      _tmpVec2.copy(player.position).divideScalar(rNow);
+      const pushOut = rNow >= PLANET_RADIUS;
+      const safeR = pushOut ? (PLANET_RADIUS + minFreeGap) : (PLANET_RADIUS - minFreeGap);
+      player.position.copy(_tmpVec2).multiplyScalar(safeR);
+
+      const radialVel = velocity.dot(_tmpVec2);
+      if (pushOut && radialVel < 0){
+        velocity.addScaledVector(_tmpVec2, -radialVel);
+      } else if (!pushOut && radialVel > 0){
+        velocity.addScaledVector(_tmpVec2, -radialVel);
+      }
+    }
+  }
+  resolveSolidTerrainCollision(player.position, velocity, 0.5);
+
+  if (player.position.lengthSq() > 0.25){
+    hasMovedFromOrigin = true;
+  }
+
+  player.updateMatrixWorld();
+  camera.updateMatrixWorld();
+  const camWorldPos = camera.getWorldPosition(_tmpVec4);
+  const beforeGuardX = camWorldPos.x, beforeGuardY = camWorldPos.y, beforeGuardZ = camWorldPos.z;
+  guardCameraFocusAgainstTerrain(camWorldPos);
+  const dxg = camWorldPos.x - beforeGuardX;
+  const dyg = camWorldPos.y - beforeGuardY;
+  const dzg = camWorldPos.z - beforeGuardZ;
+  if (dxg * dxg + dyg * dyg + dzg * dzg > 1e-8){
+    player.position.x += dxg;
+    player.position.y += dyg;
+    player.position.z += dzg;
+  }
+
+  for (const item of animatedGyroParts){
+    item.obj.rotation.z += item.speed;
+  }
+
+  for (const ring of routeRings){
+    /* [PERF OPT] Use squared distance */
+    if (nowMs >= ring.cooldownUntil && player.position.distanceToSquared(ring.mesh.position) < 19 * 19){
+      ring.cooldownUntil = nowMs + RING_COOLDOWN_MS;
+      ring.mat.opacity = RING_FADED_OPACITY;
+      ring.needsFadeUpdate = true;
+      recordTokenDelta(2, 'Route ring', false);
+    }
+  }
+
+  updateRouteRingsFade(nowMs);
+  updateCentersInfluence(nowMs);
+  updateHoldActions(nowMs);
+  updatePeerLabelsScreenPosition();
+
+  for (let i = 0; i < backgroundPlanets.length; i++){
+    const planet = backgroundPlanets[i];
+    planet.mesh.rotation.y += planet.rotSpeed;
+    planet.mesh.rotation.x += planet.rotSpeed * 0.2;
+  }
+
+  renderer.render(scene, camera);
+}
+
 animate();
 </script>
 </body>
