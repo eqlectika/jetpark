@@ -421,10 +421,10 @@ const TOUCH_TURN_SPEED = 0.0001;
 const GRAVITY = 0.0043333;
 const DAMPING_TURN = 0.99;
 const DAMPING_MOVE = 0.99;
-const PLANET_RADIUS = 2100;
+const PLANET_RADIUS = 1500;
 const PLANET_SHELL_THICKNESS = 18;
 const WATER_OUTER_OFFSET = 16;
-const WATER_INNER_OFFSET = 200;
+const WATER_INNER_OFFSET = 24;
 const WATER_THRUST_FACTOR = 0.55;
 const WATER_GRAVITY_FACTOR = 0.6;
 const WATER_DAMPING_MOVE = 0.945;
@@ -999,8 +999,8 @@ shader.fragmentShader = shader.fragmentShader
        float landmass = ridgeA + ridgeB;
 
 float surface1R = 1500.0 + max(6.0, 18.0 + (landmass * 34.0) + (ridgeB * 14.0));
-float surface2R = max(10.0, 2100.0 - max(6.0, 18.0 - (-landmass * 32.0) - (ridgeA * 12.0)));       float vol1 = max(0.0, surface1R - 1500.0);
-       float vol2 = max(0.0, 2100.0 - surface2R);
+float surface2R = max(10.0, 1500.0 - max(6.0, 18.0 - (-landmass * 32.0) - (ridgeA * 12.0)));       float vol1 = max(0.0, surface1R - 1500.0);
+       float vol2 = max(0.0, 1500.0 - surface2R);
        bool s1Larger = vol1 >= vol2;
 
        bool isIntersectionOfSurfaces = abs(surface1R - surface2R) < 22.0;
