@@ -1243,7 +1243,7 @@ function updateCentersInfluence(nowMs){
    RINGS
    ========================================================= */
 const routeRings = [];
-const ringGeo = new THREE.TorusGeometry(18, 1.1, 12, 32);
+const ringGeo = new THREE.SphereGeometry(15, 16, 12);
 
 function makeVerticalRingQuaternion(radialDir, rowHeading){
   const normal = new THREE.Vector3().crossVectors(radialDir, rowHeading);
@@ -1289,7 +1289,7 @@ ringBands.forEach((band) => {
       });
       const mesh = new THREE.Mesh(ringGeo, mat);
       mesh.position.copy(pos);
-      mesh.quaternion.copy(makeVerticalRingQuaternion(dir, tangentHeading));
+      
       scene.add(mesh);
 
       /* [PERF OPT] needsFadeUpdate flag to avoid touching materials every frame */
@@ -2630,7 +2630,7 @@ function animate(){
 
   for (const ring of routeRings){
     /* [PERF OPT] Use squared distance */
-    if (nowMs >= ring.cooldownUntil && player.position.distanceToSquared(ring.mesh.position) < 19 * 19){
+    if (nowMs >= ring.cooldownUntil && player.position.distanceToSquared(ring.mesh.position) < 17 * 17){
       ring.cooldownUntil = nowMs + RING_COOLDOWN_MS;
       ring.mat.opacity = RING_FADED_OPACITY;
       ring.needsFadeUpdate = true;
