@@ -5,8 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <link rel="icon" type="image/png" sizes="512x512" href="jetpark.PNG">
 <link rel="apple-touch-icon" sizes="180x180" href="jetpark.PNG?v=2">
-<link rel="manifest" href="manifest-outside-in.json">
-<title>Outside-in Jetpack | Mint & Build</title>
+<meta property="og:image" content="/Verge.jpeg">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="1280">
+<link rel="manifest" href="manifest.json">
+<title>Outside-in | Jetpack Mint & Build</title>
 <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
 <style>
 :root{
@@ -50,10 +53,6 @@ canvas{
   color:#cbd5e1;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;
 }
 .top-btn:hover{color:#fff}
-.top-btn.wire-active{
-  color:#38bdf8;
-  text-shadow:0 0 8px rgba(56,189,248,.65);
-}
 
 .top-right-hud{
   position:fixed;top:max(8px,env(safe-area-inset-top));right:10px;z-index:40;
@@ -190,6 +189,7 @@ canvas{
   color:#fff;
 }
 
+
 .timeframe-bar{
   display:flex;gap:6px;margin-bottom:8px;flex-shrink:0;
 }
@@ -273,7 +273,6 @@ canvas#statsChart:active{cursor:grabbing}
 <div class="top-left-hud">
   <span id="presenceBadge" class="presence-badge alone">Alone</span>
   <button id="helpBtn" class="top-btn">Help</button>
-  <button id="renderModeBtn" class="top-btn" data-mode="solid">Solid</button>
 </div>
 
 <div class="top-right-hud">
@@ -316,12 +315,13 @@ canvas#statsChart:active{cursor:grabbing}
   <div class="modal-card">
     <div class="modal-head">
       <h2>Stats</h2>
-      <button class="close-modal" id="closeStatsBtn" aria-label="Close">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <line x1="3.5" y1="3.5" x2="12.5" y2="12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          <line x1="12.5" y1="3.5" x2="3.5" y2="12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-      </button>
+<button class="close-modal" id="closeStatsBtn" aria-label="Close">
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <line x1="3.5" y1="3.5" x2="12.5" y2="12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <line x1="12.5" y1="3.5" x2="3.5" y2="12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+</button>
+
     </div>
     <div class="timeframe-bar" id="timeframeBar">
       <button class="tf-btn active" data-tf="day">Day</button>
@@ -365,10 +365,9 @@ canvas#statsChart:active{cursor:grabbing}
     </div>
     <p><strong>Touch Controls:</strong> Drag up or down on the left half of the screen for throttle; drag on the right half to tilt.</p>
     <p><strong>Desktop Controls:</strong> Use Arrow keys (<code>←</code> <code>↑</code> <code>↓</code> <code>→</code>) or hold left mouse button and drag to tilt; hold <code>Space</code> for forward thrust (double-tap <code>Space</code> for boost) or <code>B</code> for reverse thrust.</p>
-    <p><strong>Reticle &amp; Modes:</strong> Drag the crosshair to aim. <strong>Tap</strong> the crosshair to open or close the mode menu (<code>Build</code>, <code>Attack</code>, <code>Hack</code>), select a mode, and <strong>long-press</strong> the crosshair (or hold/press <code>F</code>) to activate it.</p>
+    <p><strong>Reticle &amp; Modes:</strong> Drag the crosshair to aim. <strong>Tap</strong> the crosshair to open or close the mode menu (<code>Build</code>, <code>Attack</code>, <code>Hack</code>), select a mode, and <strong>long-press</strong> the crosshair to activate it.</p>
     <p><strong>Free Flight &amp; Gravity:</strong> Fly in any direction indefinitely. Gravity is zero at the planet center and zero at the matching outer height.</p>
-    <p><strong>Water, Terrain &amp; Pass-Through Zones:</strong> The transparent shimmering water zone slows thrust, gravity, and momentum. Solid terrain is opaque and impassable without surface movement, with pass-through openings and a camera guard shell.</p>
-    <p><strong>Houses, Roofs &amp; Bridges:</strong> Buildings place on your current side without overlapping, feature roof accents matching the nearest sector center, and can span horizontally as arches or bridges when anchored to another building wall.</p>
+    <p><strong>Rings & Buildings:</strong> Fly through the rings to collect tokens and build houses.</p>
     <p><strong>Hack Houses &amp; Flyers:</strong> Hack stored tokens from other players' buildings or hack nearby players mid-flight.</p>
     <div class="help-footer-logo">
       <a href="https://eugenebox.t.me" target="_blank" rel="noopener noreferrer" title="Telegram">
@@ -390,6 +389,7 @@ canvas#statsChart:active{cursor:grabbing}
 <script type="module">
 import * as THREE from 'three';
 
+/* Block system magnifying lens / context menu / text selection outside inputs */
 document.addEventListener('contextmenu', (e) => e.preventDefault(), { passive: false });
 document.addEventListener('selectstart', (e) => {
   if (!e.target || !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)){
@@ -422,7 +422,7 @@ const DAMPING_MOVE = 0.99;
 const PLANET_RADIUS = 2100;
 const PLANET_SHELL_THICKNESS = 18;
 const WATER_OUTER_OFFSET = 16;
-const WATER_INNER_OFFSET = 16;
+const WATER_INNER_OFFSET = 200;
 const WATER_THRUST_FACTOR = 0.55;
 const WATER_GRAVITY_FACTOR = 0.6;
 const WATER_DAMPING_MOVE = 0.945;
@@ -437,8 +437,7 @@ const store = {
     const key = 'oip_' + k;
     try{
       const v = localStorage.getItem(key);
-      if (v !== null) return JSON.parse(v);
-    }catch{}
+      if (v !== null) return JSON.parse(v);     }catch{}
     return Object.prototype.hasOwnProperty.call(memoryStore, key) ? memoryStore[key] : fb;
   },
   set(k, v){
@@ -609,6 +608,7 @@ scene.add(player);
 camera.quaternion.setFromEuler(new THREE.Euler(0, 0, 0, 'YXZ'));
 player.add(camera);
 
+/* Invisible protective guard shell around camera focus so focus never enters solid terrain */
 const cameraGuardShellRadius = 2.6;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -616,6 +616,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 document.body.appendChild(renderer.domElement);
 
+/* Environment map so reflective shells reflect scene light cleanly */
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
 const envScene = new THREE.Scene();
 envScene.background = new THREE.Color(0x0a0a12);
@@ -643,6 +644,7 @@ const rimLight = new THREE.DirectionalLight(0x7dd3fc, 0.75);
 rimLight.position.set(-1200, -1600, -900);
 scene.add(rimLight);
 
+/* Slow-moving external light sources: hidden behind planet body, light bounce through pass-through windows */
 const driftingExteriorLights = [
   {
     light: new THREE.PointLight(0xfff0c2, 2.2, 4200, 0),
@@ -740,6 +742,10 @@ function updateDriftingExteriorLights(elapsedSec){
   }
 }
 
+/* =========================================================
+   BASE SHELL (GRID ONLY HERE), SHIMMERING REFRACTIVE WATER,
+   AND 100% OPAQUE SOLID TERRAIN
+   ========================================================= */
 function createBaseSurfaceGridMaterial(baseFillAlpha, gridAlpha, gridScale){
   return new THREE.ShaderMaterial({
     wireframe: false,
@@ -765,11 +771,15 @@ function createBaseSurfaceGridMaterial(baseFillAlpha, gridAlpha, gridScale){
       uniform float uBaseFill;
       uniform float uGridAlpha;
       void main(){
-        vec3 coord = vWorldPosition * uSize;
-        vec3 grid = abs(fract(coord - 0.5) - 0.5) / max(fwidth(coord), vec3(0.0001));
-        float line = min(min(grid.x, grid.y), grid.z);
-        float thinLine = 1.0 - smoothstep(0.0, 1.2, line);
-        float alpha = clamp(uBaseFill + thinLine * uGridAlpha, 0.0, 0.95);
+        float dist = length(vWorldPosition - cameraPosition);
+        float farFade = 1.0 - smoothstep(260.0, 2400.0, dist);
+        vec2 p1 = vWorldPosition.xy * uSize;
+        vec2 p2 = vWorldPosition.zy * uSize;
+        vec2 grid = abs(fract(p1 - 0.5) - 0.5) / max(fwidth(p1), 0.0001);
+        vec2 grid2 = abs(fract(p2 - 0.5) - 0.5) / max(fwidth(p2), 0.0001);
+        float line = min(min(grid.x, grid.y), min(grid2.x, grid2.y));
+        float thinLine = 1.0 - min(line / 0.65, 1.0);
+        float alpha = max(uBaseFill * farFade, thinLine * farFade * uGridAlpha);
         if (alpha < 0.005) discard;
         vec3 col = mix(vec3(0.01, 0.01, 0.015), vec3(0.16, 0.2, 0.28), thinLine * 0.75);
         gl_FragColor = vec4(col, alpha);
@@ -807,25 +817,25 @@ function createRefractiveWaterMaterial(baseOpacity, timeUniform){
         vec3 viewDir = normalize(cameraPosition - vWorldPosition);
         vec3 n = normalize(vWorldNormal);
         float ndotv = abs(dot(n, viewDir));
-        float fresnel = pow(1.0 - clamp(ndotv, 0.0, 1.0), 2.0);
+        float fresnel = pow(1.0 - clamp(ndotv, 0.0, 1.0), 2.4);
+
+        vec3 refractDir = refract(-viewDir, n, 0.75);
+        float waveA = sin(vWorldPosition.x * 0.035 + refractDir.x * 4.5 + uTime * 1.4);
+        float waveB = cos(vWorldPosition.z * 0.035 + refractDir.z * 4.5 - uTime * 1.1);
+        float waveC = sin((vWorldPosition.y + vWorldPosition.x) * 0.025 + uTime * 0.9);
+        float shimmer = clamp((waveA * 0.45 + waveB * 0.35 + waveC * 0.2) * 0.5 + 0.5, 0.0, 1.0);
+        float caustic = pow(shimmer, 3.2);
 
         float dist = length(vWorldPosition - cameraPosition);
-        float detailFade = 1.0 - smoothstep(1800.0, 6000.0, dist);
+        float farFade = 1.0 - smoothstep(260.0, 2600.0, dist);
 
-        float waveA = sin(vWorldPosition.x * 0.035 + uTime * 1.4);
-        float waveB = cos(vWorldPosition.z * 0.035 - uTime * 1.1);
-        float waveC = sin((vWorldPosition.y + vWorldPosition.x) * 0.025 + uTime * 0.9);
+        vec3 deepWater = vec3(0.015, 0.08, 0.34);
+        vec3 refractedTint = vec3(0.04, 0.30, 0.82) + refractDir * 0.06;
+        vec3 iridescence = mix(refractedTint, vec3(0.18, 0.62, 0.98), shimmer * 0.45);
+        vec3 col = mix(deepWater, iridescence, 0.42 + fresnel * 0.42) + vec3(0.22, 0.62, 1.0) * caustic * 0.24;
 
-        float rawShimmer = (waveA * 0.45 + waveB * 0.35 + waveC * 0.2) * 0.5 + 0.5;
-        float shimmer = mix(0.5, rawShimmer, detailFade);
-        float caustic = shimmer * shimmer;
-
-        vec3 deepWater = vec3(0.02, 0.12, 0.42);
-        vec3 brightWater = vec3(0.14, 0.52, 0.96);
-        vec3 col = mix(deepWater, brightWater, clamp(shimmer * 0.65 + fresnel * 0.35, 0.0, 1.0));
-        col += vec3(0.20, 0.55, 0.95) * caustic * 0.25 * detailFade;
-
-        float alpha = clamp(uBaseOpacity + fresnel * 0.20 + caustic * 0.12, 0.18, 0.55);
+        float alpha = clamp((uBaseOpacity * 0.42 + fresnel * 0.24 + caustic * 0.14) * farFade, 0.015, 0.38);
+        if (alpha < 0.006) discard;
         gl_FragColor = vec4(col, alpha);
       }
     `
@@ -872,12 +882,17 @@ function isInWaterLayer(pos){
   if (r < 0.001) return false;
   const dir = pos.clone().normalize();
   const info = sampleTerrainAtDir(dir);
+  // Внутри замкнутого участка суши воды быть не должно
   if (!info.isPassThrough && r >= info.innerSolidR && r <= info.outerSolidR){
     return false;
   }
   return r >= waterInnerRadius && r <= waterOuterRadius;
 }
 
+/* =========================================================
+   PRONONOUNCED IRREGULAR SOLID TERRAIN (100% OPAQUE, NO GRID)
+   & PASS-THROUGH WINDOWS
+   ========================================================= */
 function sampleTerrainAtDir(dir){
   const n = dir.clone().normalize();
   const ridgeA = Math.sin(n.x * 5.0 + n.y * 3.0) * Math.cos(n.z * 4.0 - n.x * 2.0);
@@ -891,8 +906,8 @@ function sampleTerrainAtDir(dir){
   }
   const windowRadiusRad = 0.24;
 
-  const surface1R = PLANET_RADIUS + Math.max(6, 18 + (landmass * 34.0) + (ridgeB * 14.0));
-  const surface2R = Math.max(10, PLANET_RADIUS - Math.max(6, 18 - (-landmass * 32.0) - (ridgeA * 12.0)));
+const surface1R = PLANET_RADIUS + Math.max(6, 18 + (landmass * 34.0) + (ridgeB * 14.0));
+const surface2R = Math.max(10, PLANET_RADIUS - Math.max(6, 18 - (-landmass * 32.0) - (ridgeA * 12.0)));
   const vol1 = Math.max(0, surface1R - PLANET_RADIUS);
   const vol2 = Math.max(0, PLANET_RADIUS - surface2R);
   const s1Larger = vol1 >= vol2;
@@ -901,7 +916,10 @@ function sampleTerrainAtDir(dir){
   const cutSmallerSide = isIntersectionOfSurfaces && (s1Larger ? (vol2 < vol1 * 0.95) : (vol1 < vol2 * 0.95));
 
   const isPassThrough = minWindowAngle < windowRadiusRad || landmass < -0.35 || cutSmallerSide;
-  const closedR = s1Larger ? surface1R : surface2R;
+
+  // Замыкаем оба слоя в единый объём: большая сторона задаёт внешний край,
+  // а внутренняя граница смыкается к ней / к базовому радиусу без зазора с водой
+const closedR = s1Larger ? surface1R : surface2R;
 
   let outerSolidR = closedR;
   let innerSolidR = closedR;
@@ -925,10 +943,10 @@ function buildDisplacedShellGeometry(radius, segW, segH, useOuterSide){
   for (let i = 0; i < posAttr.count; i++){
     v.fromBufferAttribute(posAttr, i);
     const dir = v.clone().normalize();
-    const info = sampleTerrainAtDir(dir);
-    const targetR = info.isPassThrough
-      ? (useOuterSide ? PLANET_RADIUS - 24 : PLANET_RADIUS - 32)
-      : (useOuterSide ? info.outerSolidR : info.innerSolidR);
+const info = sampleTerrainAtDir(dir);
+const targetR = info.isPassThrough
+  ? (useOuterSide ? PLANET_RADIUS - 24 : PLANET_RADIUS - 32)
+  : (useOuterSide ? info.outerSolidR : info.innerSolidR);
     v.copy(dir).multiplyScalar(targetR);
     posAttr.setXYZ(i, v.x, v.y, v.z);
   }
@@ -962,7 +980,7 @@ solidTerrainMat.onBeforeCompile = (shader) => {
        vCutWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`
     );
 
-  shader.fragmentShader = shader.fragmentShader
+shader.fragmentShader = shader.fragmentShader
     .replace(
       '#include <common>',
       `#include <common>
@@ -976,9 +994,8 @@ solidTerrainMat.onBeforeCompile = (shader) => {
        float ridgeB = sin(n.y * 8.0 - n.z * 6.0) * 0.5;
        float landmass = ridgeA + ridgeB;
 
-       float surface1R = 2100.0 + max(6.0, 18.0 + (landmass * 34.0) + (ridgeB * 14.0));
-       float surface2R = max(10.0, 2100.0 - max(6.0, 18.0 - (-landmass * 32.0) - (ridgeA * 12.0)));
-       float vol1 = max(0.0, surface1R - 2100.0);
+float surface1R = 1500.0 + max(6.0, 18.0 + (landmass * 34.0) + (ridgeB * 14.0));
+float surface2R = max(10.0, 2100.0 - max(6.0, 18.0 - (-landmass * 32.0) - (ridgeA * 12.0)));       float vol1 = max(0.0, surface1R - 1500.0);
        float vol2 = max(0.0, 2100.0 - surface2R);
        bool s1Larger = vol1 >= vol2;
 
@@ -1051,6 +1068,10 @@ function guardCameraFocusAgainstTerrain(camWorldPos){
   }
 }
 
+/* =========================================================
+   SIX DIRECTIONS — ARCHITECTURAL CENTERS ON BOTH SIDES,
+   GROWING AS BUILDINGS INCREASE
+   ========================================================= */
 const collidableObjects = [...planetShellMeshes, solidOuterMesh, solidInnerMesh];
 const linePalette = [0x38bdf8, 0xf472b6, 0xfbbf24, 0x4ade80, 0xc084fc, 0xfb7185];
 
@@ -1220,6 +1241,9 @@ function updateCentersInfluence(nowMs){
   }
 }
 
+/* =========================================================
+   MORE RINGS FARTHER FROM SURFACE ON BOTH SIDES
+   ========================================================= */
 const routeRings = [];
 const ringGeo = new THREE.TorusGeometry(18, 1.1, 12, 32);
 
@@ -1288,11 +1312,12 @@ function updateRouteRingsFade(nowMs){
   }
 }
 
+/* =========================================================
+   HOUSES ON PLAYER SIDE, NO OVERLAPS, ROOF ACCENTS & BRIDGES/ARCHES
+   ========================================================= */
 const buildingsGroup = new THREE.Group();
 scene.add(buildingsGroup);
 const buildingMeshes = new Map();
-
-let currentRenderMode = 'solid';
 
 function getHouseHeight(b){
   const invested = Math.max(0, (b.storedTokens || 0) + ((b.tier || 1) - 1) * 2);
@@ -1389,85 +1414,11 @@ function upsertBuildingMesh(b){
   const nearestCenter = getNearestCenterSpec(flushBase);
   addArchAccentToParent(houseMesh, nearestCenter.arch, h * 0.5, b.isBridge ? 0.9 : 0.78, outlineCol, false);
 
-  if (currentRenderMode === 'wire'){
-    houseMesh.material.wireframe = true;
-  }
-
   buildingsGroup.add(houseMesh);
   buildingMeshes.set(b.id, houseMesh);
   collidableObjects.push(houseMesh);
 }
 buildings.forEach(upsertBuildingMesh);
-
-/* =========================================================
-   SOLID / WIRE BUTTON LOGIC
-   ========================================================= */
-const renderModeBtn = document.getElementById('renderModeBtn');
-let renderMode = store.get('render_mode', 'solid');
-if (renderMode !== 'solid' && renderMode !== 'wire') renderMode = 'solid';
-
-function setBuildingWireframe(isWire){
-  buildingsGroup.traverse((obj) => {
-    if (!obj.isMesh || !obj.material) return;
-    if (obj.userData.origWireframe === undefined){
-      obj.userData.origWireframe = Boolean(obj.material.wireframe);
-    }
-    obj.material.wireframe = isWire ? true : obj.userData.origWireframe;
-  });
-}
-
-function applyRenderMode(mode){
-  renderMode = mode === 'wire' ? 'wire' : 'solid';
-  currentRenderMode = renderMode;
-  store.set('render_mode', renderMode);
-
-  const isWire = renderMode === 'wire';
-  renderModeBtn.dataset.mode = renderMode;
-  renderModeBtn.textContent = isWire ? 'Wire' : 'Solid';
-  renderModeBtn.classList.toggle('wire-active', isWire);
-
-  solidTerrainMat.wireframe = isWire;
-
-  planetShellMeshes.forEach((mesh) => {
-    const mat = mesh.material;
-    if (!mat || !mat.uniforms) return;
-    mat.wireframe = isWire;
-    if (mat.uniforms.uGridAlpha){
-      if (mat.userData.origGridAlpha === undefined){
-        mat.userData.origGridAlpha = mat.uniforms.uGridAlpha.value;
-      }
-      mat.uniforms.uGridAlpha.value = isWire ? 0.92 : mat.userData.origGridAlpha;
-    }
-    if (mat.uniforms.uBaseFill){
-      if (mat.userData.origBaseFill === undefined){
-        mat.userData.origBaseFill = mat.uniforms.uBaseFill.value;
-      }
-      mat.uniforms.uBaseFill.value = isWire ? 0.03 : mat.userData.origBaseFill;
-    }
-  });
-
-  [waterOuterMesh, waterInnerMesh].forEach((mesh) => {
-    const mat = mesh.material;
-    if (!mat || !mat.uniforms) return;
-    mat.wireframe = isWire;
-    if (mat.uniforms.uBaseOpacity){
-      if (mat.userData.origBaseOpacity === undefined){
-        mat.userData.origBaseOpacity = mat.uniforms.uBaseOpacity.value;
-      }
-      mat.uniforms.uBaseOpacity.value = isWire ? 0.05 : mat.userData.origBaseOpacity;
-    }
-  });
-
-  setBuildingWireframe(isWire);
-}
-
-renderModeBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  const nextMode = renderMode === 'solid' ? 'wire' : 'solid';
-  applyRenderMode(nextMode);
-});
-
-applyRenderMode(renderMode);
 
 function doesOverlapExistingBuilding(candidatePos, candidateRadius, ignoreId = null){
   for (const b of buildings){
@@ -1618,7 +1569,7 @@ function computePlacementOnPlayerSide(aimPoint){
 
 const backgroundPlanets = [];
 [
-  { radius: 500, color: 0xe27b58, x: 3500, y: 2100, z: -2000, rotSpeed: 0.002 },
+  { radius: 500, color: 0xe27b58, x: 3500, y: 1500, z: -2000, rotSpeed: 0.002 },
   { radius: 800, color: 0x47637c, x: -4500, y: -2000, z: -3000, rotSpeed: 0.001 },
   { radius: 300, color: 0x8d5b9c, x: -4000, y: -4000, z: -4000, rotSpeed: 0.003 }
 ].forEach(data => {
@@ -1631,6 +1582,9 @@ const backgroundPlanets = [];
   backgroundPlanets.push({ mesh: m, rotSpeed: data.rotSpeed });
 });
 
+/* =========================================================
+   MQTT MULTIPLAYER, CRYSTAL REFLECTIVE PEER SHELL + HORIZONTAL NEON NAMES
+   ========================================================= */
 const BROKER = 'wss://broker.emqx.io:8084/mqtt';
 const TOPIC = 'outside_in_planet/megacity/v1';
 let mqttClient = null;
@@ -1816,7 +1770,7 @@ setInterval(() => {
     });
   }
   updatePresenceUI();
-}, 2100);
+}, 1500);
 
 function sendChat(){
   const txt = chatInput.value.trim();
@@ -1840,6 +1794,10 @@ peerIdInput.addEventListener('blur', () => {
   }
 });
 
+/* =========================================================
+   RETICLE: TAP ONLY TOGGLES MENU; EXPLICIT CLICK SELECTS MODE;
+   LONG-PRESS ACTIVATES SELECTED MODE
+   ========================================================= */
 let selectedReticleMode = 'build';
 let menuOpenedAt = 0;
 
@@ -2121,6 +2079,9 @@ const onReticleRelease = (e) => {
 attackBtn.addEventListener('pointerup', onReticleRelease);
 attackBtn.addEventListener('pointercancel', onReticleRelease);
 
+/* =========================================================
+   STATS MODAL (TIMEFRAMES + TOUCH SCROLL ON CHART + WITHDRAW)
+   ========================================================= */
 const statsModal = document.getElementById('statsModal');
 const statsCard = statsModal.querySelector('.modal-card');
 const statsChartEl = document.getElementById('statsChart');
@@ -2392,6 +2353,10 @@ const helpModal = document.getElementById('helpModal');
 document.getElementById('helpBtn').addEventListener('click', () => helpModal.classList.add('show'));
 document.getElementById('closeHelpBtn').addEventListener('click', () => helpModal.classList.remove('show'));
 
+/* =========================================================
+   FLIGHT PHYSICS: LINEAR SPEED, ZERO GRAVITY AT CENTER &
+   MATCHING OUTER HEIGHT, WATER DENSITY & SOLID TERRAIN
+   ========================================================= */
 let velocity = new THREE.Vector3(0, 0, 0);
 let angularVelocityX = 0;
 let angularVelocityZ = 0;
@@ -2494,7 +2459,7 @@ function animate(){
   const inWater = isInWaterLayer(player.position);
   let hasControlInput = false;
 
-  if (Date.now() >= frozenUntil){
+if (Date.now() >= frozenUntil){
     if (keys['ArrowLeft']){ angularVelocityZ += TURN_SPEED; hasControlInput = true; }
     if (keys['ArrowRight']){ angularVelocityZ -= TURN_SPEED; hasControlInput = true; }
     if (keys['ArrowUp']){ angularVelocityX -= TURN_SPEED; hasControlInput = true; }
@@ -2538,12 +2503,10 @@ function animate(){
     angularVelocityZ *= 0.85;
   }
 
-  const gravityVec = computeGravity(player.position, inWater);
+const gravityVec = computeGravity(player.position, inWater);
   applyPendulumSelfLeveling(hasControlInput, gravityVec);
-  velocity.add(gravityVec);
-  velocity.multiplyScalar(inWater ? WATER_DAMPING_MOVE : DAMPING_MOVE);
+  velocity.add(gravityVec);  velocity.multiplyScalar(inWater ? WATER_DAMPING_MOVE : DAMPING_MOVE);
   player.position.add(velocity);
-
   if (!hasControlInput && Date.now() >= frozenUntil){
     const rNow = player.position.length();
     const minFreeGap = 6.0;
@@ -2567,6 +2530,7 @@ function animate(){
     hasMovedFromOrigin = true;
   }
 
+  /* Invisible guard shell around camera focus so camera focus never enters solid terrain */
   player.updateMatrixWorld();
   camera.updateMatrixWorld();
   const camWorldPos = camera.getWorldPosition(new THREE.Vector3());
