@@ -437,7 +437,7 @@ const WATER_INNER_OFFSET = 55;
 const WATER_THRUST_FACTOR = 0.55;
 const WATER_GRAVITY_FACTOR = 0.6;
 const WATER_DAMPING_MOVE = 0.945;
-const RING_COOLDOWN_MS = 4000;
+const RING_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const RING_ACTIVE_OPACITY = 0.9;
 const RING_FADED_OPACITY = 0.14;
 const LONG_PRESS_MS = 450;
@@ -1252,6 +1252,8 @@ function updateCentersInfluence(nowMs){
    RINGS
    ========================================================= */
 const routeRings = [];
+const savedRingCooldowns = store.get('ring_cooldowns', {});
+
 const ringGeo = new THREE.SphereGeometry(15, 16, 12);
 
 function makeVerticalRingQuaternion(radialDir, rowHeading){
@@ -1305,6 +1307,15 @@ ringBands.forEach((band) => {
       routeRings.push({ mesh, mat, cooldownUntil: 0, needsFadeUpdate: false });
       ringIdxCounter++;
     }
+  }
+});
+const nowInitMs = Date.now();
+routeRings.forEach((ring, idx) => {
+  const until = Number(savedRingCooldowns[idx] || 0);
+  if (until > nowInitMs){
+    ring.cooldownUntil = until;
+    ring.mat.opacity = RING_FADED_OPACITY;
+    ring.needsFadeUpdate = true;
   }
 });
 
@@ -2541,7 +2552,8 @@ function animate(){
   waterTimeUniform.value += dt;
   updateDriftingExteriorLights(elapsedTimeSec);
 
-  const nowMs = performance.now();
+  const nowMs = Date.now();
+
   const inWater = isInWaterLayer(player.position);
   let hasControlInput = false;
 
@@ -2637,15 +2649,23 @@ function animate(){
     item.obj.rotation.z += item.speed;
   }
 
-  for (const ring of routeRings){
-    /* [PERF OPT] Use squared distance */
-    if (nowMs >= ring.cooldownUntil && player.position.distanceToSquared(ring.mesh.position) < 17 * 17){
-      ring.cooldownUntil = nowMs + RING_COOLDOWN_MS;
-      ring.mat.opacity = RING_FADED_OPACITY;
-      ring.needsFadeUpdate = true;
-      recordTokenDelta(2, 'Route ring', false);
-    }
+let cooldownsChanged = false;
+for (let i = 0; i < routeRings.length; i++){
+  const ring = routeRings[i];
+  /* [PERF OPT] Use squared distance */
+  if (nowMs >= ring.cooldownUntil && player.position.distanceToSquared(ring.mesh.position) < 17 * 17){
+    ring.cooldownUntil = nowMs + RING_COOLDOWN_MS;
+    ring.mat.opacity = RING_FADED_OPACITY;
+    ring.needsFadeUpdate = true;
+    savedRingCooldowns[i] = ring.cooldownUntil;
+    cooldownsChanged = true;
+    recordTokenDelta(2, 'Route ring', false);
   }
+}
+if (cooldownsChanged){
+  store.set('ring_cooldowns', savedRingCooldowns);
+}
+
 
   updateRouteRingsFade(nowMs);
   updateCentersInfluence(nowMs);
