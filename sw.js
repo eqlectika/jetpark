@@ -1,4 +1,4 @@
-const CACHE_NAME = 'outside-in-jetpack-v2';
+const CACHE_NAME = 'outside-in-jetpack-v4';
 const CORE_ASSETS = [
   './',
   './manifest.json',
