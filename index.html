@@ -600,6 +600,7 @@ function routeAuthorFee(amount, source, buildingId = null){
 }
 
 const peerIdInput = document.getElementById('peerIdInput');
+  peerIdInput.value = myPeerId;
 const presenceBadge = document.getElementById('presenceBadge');
 const tokenBalanceEl = document.getElementById('tokenBalanceEl');
 const chatFeed = document.getElementById('chatFeed');
@@ -2268,19 +2269,38 @@ function sendChat(){
 }
 chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter'){ e.preventDefault(); sendChat(); } });
 
-peerIdInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') peerIdInput.blur(); });
-
-peerIdInput.addEventListener('blur', () => {
+function applyPeerIdInput(showSavedFlash = false){
   const v = peerIdInput.value.trim();
   if (/^[A-Za-z0-9_\-]{3,12}$/.test(v)){
     myPeerId = v;
+    peerIdInput.value = myPeerId;
     store.set('peer_id', myPeerId);
     publishCurrentState(true);
-    peerIdInput.classList.add('saved');
-    setTimeout(() => peerIdInput.classList.remove('saved'), 700);
-  } else {
-    peerIdInput.value = myPeerId;
+    if (showSavedFlash){
+      peerIdInput.classList.add('saved');
+      setTimeout(() => peerIdInput.classList.remove('saved'), 700);
+    }
+    return true;
   }
+  peerIdInput.value = myPeerId;
+  return false;
+}
+
+peerIdInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter'){
+    e.preventDefault();
+    applyPeerIdInput(true);
+    peerIdInput.blur();
+  }
+});
+
+peerIdInput.addEventListener('blur', () => {
+  applyPeerIdInput(true);
+});
+
+window.addEventListener('pagehide', () => {
+  applyPeerIdInput(false);
+  store.set('peer_id', myPeerId);
 });
 
 
