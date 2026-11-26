@@ -265,6 +265,7 @@ canvas#statsChart:active{cursor:grabbing}
   color: transparent;
 }
 #wireToggleBtn.on{ color:#fbbf24; }
+#nameToggleBtn.off{ color:#94a3b8; }
 #statsModal,
 #statsModal button,
 #statsModal input,
@@ -284,6 +285,7 @@ canvas#statsChart:active{cursor:grabbing}
   <span id="presenceBadge" class="presence-badge alone">Alone</span>
   <button id="helpBtn" class="top-btn">Help</button>
   <button id="wireToggleBtn" class="top-btn" title="Toggle Wire / Solid rendering">Wire</button>
+  <button id="nameToggleBtn" class="top-btn" title="Toggle player names">Name</button>
 </div>
 
 <div class="top-right-hud">
@@ -550,6 +552,7 @@ const chatFeed = document.getElementById('chatFeed');
 const chatInput = document.getElementById('chatInput');
 const attackBtn = document.getElementById('attackBtn');
 const wireToggleBtn = document.getElementById('wireToggleBtn');
+const nameToggleBtn = document.getElementById('nameToggleBtn');
 const reticleWrapEl = document.getElementById('reticleWrap');
 const reticleMenu = document.getElementById('reticleMenu');
 const peerLabelsLayer = document.getElementById('peerLabelsLayer');
@@ -658,6 +661,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 document.body.appendChild(renderer.domElement);
 
 const pmremGenerator = new THREE.PMREMGenerator(renderer);
+pmremGenerator.compileEquirectangularShader();
 const envScene = new THREE.Scene();
 envScene.background = new THREE.Color(0x0a0a12);
 const envLightA = new THREE.PointLight(0xfff4d6, 12, 50);
@@ -667,8 +671,50 @@ envLightB.position.set(-8, -6, 5);
 const envLightC = new THREE.PointLight(0xf472b6, 8, 50);
 envLightC.position.set(0, -10, -8);
 envScene.add(envLightA, envLightB, envLightC);
-scene.environment = pmremGenerator.fromScene(envScene, 0.02).texture;
-pmremGenerator.dispose();
+
+const envPlanetRef = new THREE.Mesh(
+  new THREE.SphereGeometry(26, 24, 18),
+  new THREE.MeshBasicMaterial({ color: 0x3b82f6, wireframe: true })
+);
+envPlanetRef.position.set(0, -45, 0);
+envScene.add(envPlanetRef);
+
+const envBgPlanets = [
+  { mesh: new THREE.Mesh(new THREE.SphereGeometry(9, 16, 12), new THREE.MeshBasicMaterial({ color: 0xe27b58 })), x: 22, y: 38, z: -18 },
+  { mesh: new THREE.Mesh(new THREE.SphereGeometry(13, 16, 12), new THREE.MeshBasicMaterial({ color: 0x47637c })), x: -30, y: -14, z: -24 },
+  { mesh: new THREE.Mesh(new THREE.SphereGeometry(6, 16, 12), new THREE.MeshBasicMaterial({ color: 0x8d5b9c })), x: -26, y: -24, z: -30 }
+];
+envBgPlanets.forEach((p) => {
+  p.mesh.position.set(p.x, p.y, p.z);
+  envScene.add(p.mesh);
+});
+
+let envRenderTarget = pmremGenerator.fromScene(envScene, 0.02);
+scene.environment = envRenderTarget.texture;
+let lastEnvUpdateMs = 0;
+
+function updatePlayerShellReflection(nowMs){
+  if (nowMs - lastEnvUpdateMs < 350) return;
+  lastEnvUpdateMs = nowMs;
+  const pLen = player.position.length();
+  if (pLen > 0.001){
+    _tmpVec1.copy(player.position).divideScalar(pLen);
+    const deltaR = PLANET_RADIUS - pLen;
+    envPlanetRef.position.copy(_tmpVec1).multiplyScalar(Math.max(-90, Math.min(90, deltaR * 0.03)));
+  }
+  for (let i = 0; i < envBgPlanets.length; i++){
+    const bp = envBgPlanets[i];
+    _tmpVec2.set(bp.x * 160, bp.y * 160, bp.z * 160).sub(player.position);
+    if (_tmpVec2.lengthSq() > 1e-4){
+      _tmpVec2.normalize().multiplyScalar(42);
+      bp.mesh.position.copy(_tmpVec2);
+    }
+  }
+  const prevTarget = envRenderTarget;
+  envRenderTarget = pmremGenerator.fromScene(envScene, 0.02);
+  scene.environment = envRenderTarget.texture;
+  if (prevTarget) prevTarget.dispose();
+}
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -1642,12 +1688,8 @@ const backgroundPlanets = [];
    MQTT MULTIPLAYER
    ========================================================= */
 
-const BROKERS = [
-  'wss://broker.emqx.io:8084/mqtt',
-  'wss://test.mosquitto.org:8081'
-];
+const BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
 const TOPIC = 'outside_in_planet/megacity/v1';
-let currentBrokerIndex = 0;
 let mqttClient = null;
 const remotePeers = new Map();
 let activeRemoteAttacks = {};
@@ -1673,17 +1715,19 @@ function createPeerSubjectGroup(labelText){
   );
   group.add(coreMesh);
 
-  const glassShell = new THREE.Mesh(
+const glassShell = new THREE.Mesh(
     new THREE.SphereGeometry(3.3, 48, 36),
     new THREE.MeshPhysicalMaterial({
-      color: 0xffffff,
+      color: 0xdbeafe,
       transparent: true,
-      opacity: 0.01,
-      roughness: 0.0,
-      metalness: 0.1,
+      opacity: 0.24,
+      roughness: 0.04,
+      metalness: 0.08,
+      ior: 1.48,
+      reflectivity: 0.95,
       clearcoat: 1.0,
-      clearcoatRoughness: 0.0,
-      envMapIntensity: 2.2,
+      clearcoatRoughness: 0.04,
+      envMapIntensity: 3.4,
       depthWrite: false
     })
   );
@@ -1710,10 +1754,38 @@ function getOrCreateRemotePeer(id){
   return entry;
 }
 
+let showPeerNames = store.get('show_peer_names', true);
+
+function syncNameToggleUI(){
+  if (!nameToggleBtn) return;
+  nameToggleBtn.textContent = showPeerNames ? 'Name' : 'Noname';
+  nameToggleBtn.classList.toggle('off', !showPeerNames);
+  if (!showPeerNames){
+    for (const entry of remotePeers.values()){
+      entry.tagEl.style.display = 'none';
+    }
+  }
+}
+
+if (nameToggleBtn){
+  syncNameToggleUI();
+  nameToggleBtn.addEventListener('click', () => {
+    showPeerNames = !showPeerNames;
+    store.set('show_peer_names', showPeerNames);
+    syncNameToggleUI();
+    updatePeerLabelsScreenPosition();
+  });
+}
+
 function updatePeerLabelsScreenPosition(){
+  if (!showPeerNames){
+    for (const entry of remotePeers.values()){
+      entry.tagEl.style.display = 'none';
+    }
+    return;
+  }
   const w = window.innerWidth;
   const h = window.innerHeight;
-
   for (const entry of remotePeers.values()){
     _tmpVec1.copy(entry.mesh.position);
     const r = _tmpVec1.length();
@@ -1797,17 +1869,14 @@ function isDuplicateMqttMessage(data){
   return false;
 }
 
-function connectMqttBroker(index = 0){
-  currentBrokerIndex = index % BROKERS.length;
-  const brokerUrl = BROKERS[currentBrokerIndex];
+function connectMqttBroker(){
   if (mqttClient){
     try{ mqttClient.removeAllListeners(); mqttClient.end(true); }catch{}
     mqttClient = null;
   }
 
-  let failCount = 0;
   try{
-    mqttClient = mqtt.connect(brokerUrl, {
+    mqttClient = mqtt.connect(BROKER_URL, {
       clientId,
       reconnectPeriod: 2500,
       connectTimeout: 4000,
@@ -1816,18 +1885,12 @@ function connectMqttBroker(index = 0){
     });
 
     mqttClient.on('connect', () => {
-      failCount = 0;
       mqttClient.subscribe(TOPIC, { qos: 0 });
       publishCurrentState(true);
       publishMqtt({ type: 'SYNC_REQUEST' });
     });
 
-    mqttClient.on('error', () => {
-      failCount++;
-      if (failCount >= 2){
-        connectMqttBroker(currentBrokerIndex + 1);
-      }
-    });
+    mqttClient.on('error', () => {});
 
     mqttClient.on('message', (_, raw) => {
       let data;
@@ -1882,9 +1945,7 @@ function connectMqttBroker(index = 0){
         }
       }
     });
-  }catch{
-    setTimeout(() => connectMqttBroker(currentBrokerIndex + 1), 2500);
-  }
+  }catch{}
 }
 
 
@@ -1900,7 +1961,7 @@ function appendChatLine(sender, text){
   chatFeed.scrollTop = chatFeed.scrollHeight;
 }
 
-connectMqttBroker(0);
+connectMqttBroker();
 
 
 setInterval(() => {
@@ -2561,7 +2622,11 @@ let elapsedTimeSec = 0;
 const OUTER_ZERO_GRAVITY_RADIUS = PLANET_RADIUS + 1200;
 /* [PERF OPT] Reusable gravity result vector */
 const _gravityVec = new THREE.Vector3();
-
+const _camBaseQuat = new THREE.Quaternion();
+const _camTargetQuat = new THREE.Quaternion();
+const _camLookDir = new THREE.Vector3();
+const _camSmoothDir = new THREE.Vector3(0, 0, -1);
+const _camForwardBase = new THREE.Vector3(0, 0, -1);
 function computeGravity(pos, inWater, outVec){
   const r = pos.length();
   if (r < 0.001 || r >= OUTER_ZERO_GRAVITY_RADIUS){
@@ -2788,7 +2853,19 @@ function animate(){
     player.position.y += dyg;
     player.position.z += dzg;
   }
+const speed = velocity.length();
+  if (speed > 0.05){
+    _tmpQuat2.copy(player.quaternion).invert();
+    _camLookDir.copy(velocity).divideScalar(speed).applyQuaternion(_tmpQuat2).normalize();
+    const blendFactor = Math.min(0.65, speed * 0.4);
+    _camLookDir.lerp(_camForwardBase, 1 - blendFactor * 0.65).normalize();
+  } else {
+    _camLookDir.copy(_camForwardBase);
+  }
 
+  _camSmoothDir.lerp(_camLookDir, 1 - Math.exp(-6 * dt)).normalize();
+  _camTargetQuat.setFromUnitVectors(_camForwardBase, _camSmoothDir);
+  camera.quaternion.slerp(_camTargetQuat, 1 - Math.exp(-10 * dt));
   for (const item of animatedGyroParts){
     item.obj.rotation.z += item.speed;
   }
@@ -2811,9 +2888,10 @@ if (cooldownsChanged){
 }
 
 
-  updateRouteRingsFade(nowMs);
+updateRouteRingsFade(nowMs);
   updateCentersInfluence(nowMs);
   updateHoldActions(nowMs);
+  updatePlayerShellReflection(nowMs);
   updatePeerLabelsScreenPosition();
 
   for (let i = 0; i < backgroundPlanets.length; i++){
