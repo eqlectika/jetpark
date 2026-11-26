@@ -438,8 +438,8 @@ const DAMPING_TURN = 0.99;
 const DAMPING_MOVE = 0.99;
 const PLANET_RADIUS = 7800;
 const PLANET_SHELL_THICKNESS = 18;
-const WATER_OUTER_OFFSET = 16;
-const WATER_INNER_OFFSET = 55;
+const WATER_OUTER_OFFSET = 26;
+const WATER_INNER_OFFSET = 65;
 const WATER_THRUST_FACTOR = 0.55;
 const WATER_GRAVITY_FACTOR = 0.6;
 const WATER_DAMPING_MOVE = 0.945;
@@ -457,7 +457,12 @@ const _tmpVec5 = new THREE.Vector3();
 const _tmpQuat1 = new THREE.Quaternion();
 const _tmpQuat2 = new THREE.Quaternion();
 const _tmpEuler = new THREE.Euler(0, 0, 0, 'YXZ');
-
+const _camBaseQuat = new THREE.Quaternion();
+const _camTargetQuat = new THREE.Quaternion();
+const _camLookDir = new THREE.Vector3();
+const _camSmoothDir = new THREE.Vector3(0, 0, -1);
+const _camForwardBase = new THREE.Vector3(0, 0, -1);
+  
 const memoryStore = {};
 const store = {
   get(k, fb){
@@ -642,8 +647,8 @@ window.addEventListener('dragstart', (e) => e.preventDefault());
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0a12);
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 24000);
-
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 60000);
+  
 const player = new THREE.Group();
 player.position.set(0, 0, 0);
 scene.add(player);
@@ -686,34 +691,34 @@ scene.add(rimLight);
 
 const driftingExteriorLights = [
   {
-    light: new THREE.PointLight(0xfff0c2, 2.2, 4200, 0),
+    light: new THREE.PointLight(0xfff0c2, 2.2, 22000, 0),
     baseIntensity: 2.2,
-    orbitRadius: PLANET_RADIUS + 460,
+    orbitRadius: PLANET_RADIUS + 2400,
     speed: 0.000045,
     phase: 0.2,
     tiltAxis: new THREE.Vector3(0.7071, 0.7071, 0).normalize(),
     dirVec: new THREE.Vector3()
   },
   {
-    light: new THREE.PointLight(0x93c5fd, 1.8, 4200, 0),
+    light: new THREE.PointLight(0x93c5fd, 1.8, 22000, 0),
     baseIntensity: 1.8,
-    orbitRadius: PLANET_RADIUS + 520,
+    orbitRadius: PLANET_RADIUS + 2700,
     speed: -0.000032,
     phase: 2.3,
     tiltAxis: new THREE.Vector3(-0.7071, 0.7071, 0).normalize(),
     dirVec: new THREE.Vector3()
   },
   {
-    light: new THREE.PointLight(0xfde68a, 1.6, 4000, 0),
+    light: new THREE.PointLight(0xfde68a, 1.6, 20000, 0),
     baseIntensity: 1.6,
-    orbitRadius: PLANET_RADIUS + 490,
+    orbitRadius: PLANET_RADIUS + 2550,
     speed: 0.000026,
     phase: 4.1,
     tiltAxis: new THREE.Vector3(0, 0.7071, 0.7071).normalize(),
     dirVec: new THREE.Vector3()
   }
 ];
-const passThroughBounceLight = new THREE.PointLight(0x93c5fd, 0, 2600, 0);
+const passThroughBounceLight = new THREE.PointLight(0x93c5fd, 0, 14000, 0);
 scene.add(passThroughBounceLight);
 
 driftingExteriorLights.forEach((item) => {
@@ -809,7 +814,7 @@ function createBaseSurfaceGridMaterial(baseFillAlpha, gridAlpha, gridScale){
       uniform float uGridAlpha;
       void main(){
         float dist = length(vWorldPosition - cameraPosition);
-        float farFade = 1.0 - smoothstep(260.0, 2400.0, dist);
+        float farFade = 1.0 - smoothstep(1400.0, 14000.0, dist);
         vec2 p1 = vWorldPosition.xy * uSize;
         vec2 p2 = vWorldPosition.zy * uSize;
         vec2 grid = abs(fract(p1 - 0.5) - 0.5) / max(fwidth(p1), 0.0001);
@@ -857,14 +862,14 @@ function createRefractiveWaterMaterial(baseOpacity, timeUniform){
         float fresnel = pow(1.0 - clamp(ndotv, 0.0, 1.0), 2.4);
 
         vec3 refractDir = refract(-viewDir, n, 0.75);
-        float waveA = sin(vWorldPosition.x * 0.035 + refractDir.x * 4.5 + uTime * 1.4);
-        float waveB = cos(vWorldPosition.z * 0.035 + refractDir.z * 4.5 - uTime * 1.1);
-        float waveC = sin((vWorldPosition.y + vWorldPosition.x) * 0.025 + uTime * 0.9);
+        float waveA = sin(vWorldPosition.x * 0.007 + refractDir.x * 4.5 + uTime * 1.4);
+        float waveB = cos(vWorldPosition.z * 0.007 + refractDir.z * 4.5 - uTime * 1.1);
+        float waveC = sin((vWorldPosition.y + vWorldPosition.x) * 0.005 + uTime * 0.9);
         float shimmer = clamp((waveA * 0.45 + waveB * 0.35 + waveC * 0.2) * 0.5 + 0.5, 0.0, 1.0);
         float caustic = pow(shimmer, 3.2);
 
         float dist = length(vWorldPosition - cameraPosition);
-        float farFade = 1.0 - smoothstep(260.0, 2600.0, dist);
+        float farFade = 1.0 - smoothstep(1400.0, 12500.0, dist);
 
         vec3 deepWater = vec3(0.015, 0.08, 0.34);
         vec3 refractedTint = vec3(0.04, 0.30, 0.82) + refractDir * 0.06;
@@ -1036,8 +1041,8 @@ solidTerrainMat.onBeforeCompile = (shader) => {
     .replace(
       '#include <dithering_fragment>',
       `float rPos = length(vCutWorldPos);
-       float aboveMask = smoothstep(1512.0, 1516.0, rPos);
-       float belowMask = 1.0 - smoothstep(1484.0, 1488.0, rPos);
+       float aboveMask = smoothstep(7812.0, 7816.0, rPos);
+       float belowMask = 1.0 - smoothstep(7784.0, 7788.0, rPos);
        float softGrain = 0.96 + 0.04 * sin(vCutWorldPos.x * 0.25) * cos(vCutWorldPos.z * 0.25);
        vec3 aboveLand = vec3(0.46, 0.39, 0.30) * softGrain;
        vec3 belowLand = vec3(0.05, 0.13, 0.24) * softGrain;
@@ -2782,13 +2787,28 @@ const speedFactor = Math.min(1, velocity.length() / 1.5);
   camera.position.z += (targetCamZ - camera.position.z) * camSmooth;
   camera.position.y += (targetCamY - camera.position.y) * camSmooth;
 
-  const targetFov = 75 + speedFactor * 8;
+const targetFov = 75 + speedFactor * 8;
   if (Math.abs(camera.fov - targetFov) > 0.05){
     camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-8 * dt));
     camera.updateProjectionMatrix();
   }
 
+const speed = velocity.length();
+  if (speed > 0.05){
+    _tmpQuat2.copy(player.quaternion).invert();
+    _camLookDir.copy(velocity).divideScalar(speed).applyQuaternion(_tmpQuat2).normalize();
+    const blendFactor = Math.min(0.65, speed * 0.4);
+    _camLookDir.lerp(_camForwardBase, 1 - blendFactor * 0.65).normalize();
+  } else {
+    _camLookDir.copy(_camForwardBase);
+  }
+
+  _camSmoothDir.lerp(_camLookDir, 1 - Math.exp(-6 * dt)).normalize();
+  _camTargetQuat.setFromUnitVectors(_camForwardBase, _camSmoothDir);
+  camera.quaternion.slerp(_camTargetQuat, 1 - Math.exp(-10 * dt));
+
   player.updateMatrixWorld();
+  
   camera.updateMatrixWorld();
   const camWorldPos = camera.getWorldPosition(_tmpVec4);
   const beforeGuardX = camWorldPos.x, beforeGuardY = camWorldPos.y, beforeGuardZ = camWorldPos.z;
