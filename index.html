@@ -70,6 +70,33 @@ canvas{
   position:fixed;right:24px;bottom:84px;z-index:45;
   touch-action:none;
 }
+#reticleModeTag{
+  position:absolute;
+  left:50%;
+  bottom:calc(100% + 2px);
+  transform:translateX(-50%);
+  padding:1px 6px;
+  border-radius:4px;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:.5px;
+  line-height:1.25;
+  text-transform:uppercase;
+  color:#e2e8f0;
+  background:rgba(10,14,26,.78);
+  border:1px solid rgba(148,163,184,.28);
+  white-space:nowrap;
+  pointer-events:none;
+  user-select:none;
+}
+#reticleModeTag.mode-attack{
+  color:#fda4af;
+  border-color:rgba(251,113,133,.55);
+}
+#reticleModeTag.mode-hack{
+  color:#7dd3fc;
+  border-color:rgba(56,189,248,.55);
+}
 #attackBtn{
   width:56px;height:56px;
   background:transparent;border:none;
@@ -300,6 +327,7 @@ canvas#statsChart:active{cursor:grabbing}
 <div id="controlArea"></div>
 
 <div id="reticleWrap">
+  <div id="reticleModeTag" aria-hidden="true">BUILD</div>
   <div id="attackBtn" title="Tap to open menu. Long-press the crosshair to activate the mode.">
     <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
       <line x1="18" y1="3" x2="18" y2="13" stroke="currentColor" stroke-width="2"/>
@@ -562,19 +590,26 @@ const reticleMenu = document.getElementById('reticleMenu');
 const peerLabelsLayer = document.getElementById('peerLabelsLayer');
 
 const startButtonEl = document.getElementById('startButton');
-const isStandalonePwa =
-  window.matchMedia('(display-mode: standalone)').matches ||
-  window.navigator.standalone === true;
-const isIosDevice =
-  /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const canRequestFullscreen =
-  typeof document.documentElement.requestFullscreen === 'function' ||
-  typeof document.documentElement.webkitRequestFullscreen === 'function';
 
-if (!isStandalonePwa && !isIosDevice && canRequestFullscreen){
-  startButtonEl.style.display = 'block';
+function syncFullscreenButtonVisibility(){
+  const isStandalonePwa =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.matchMedia('(display-mode: fullscreen)').matches ||
+    window.navigator.standalone === true;
+  const isIosDevice =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const canRequestFullscreen =
+    typeof document.documentElement.requestFullscreen === 'function' ||
+    typeof document.documentElement.webkitRequestFullscreen === 'function';
+
+  const shouldShow = !isStandalonePwa && !isIosDevice && canRequestFullscreen;
+  startButtonEl.style.display = shouldShow ? 'block' : 'none';
 }
+
+syncFullscreenButtonVisibility();
+window.matchMedia('(display-mode: standalone)').addEventListener('change', syncFullscreenButtonVisibility);
+window.matchMedia('(display-mode: fullscreen)').addEventListener('change', syncFullscreenButtonVisibility);
 
 startButtonEl.addEventListener('click', () => {
   startButtonEl.style.display = 'none';
@@ -2030,11 +2065,22 @@ peerIdInput.addEventListener('blur', () => {
 let selectedReticleMode = 'build';
 let menuOpenedAt = 0;
 
+const reticleModeTagEl = document.getElementById('reticleModeTag');
+
+function syncReticleModeTag(){
+  if (!reticleModeTagEl) return;
+  reticleModeTagEl.textContent = selectedReticleMode;
+  reticleModeTagEl.classList.remove('mode-build', 'mode-attack', 'mode-hack');
+  reticleModeTagEl.classList.add('mode-' + selectedReticleMode);
+}
+
 function syncMenuSelectionUI(){
   reticleMenu.querySelectorAll('.rm-item').forEach(b => {
     b.classList.toggle('selected', b.dataset.mode === selectedReticleMode);
   });
+  syncReticleModeTag();
 }
+syncReticleModeTag();
 
 function openReticleMenu(){
   syncMenuSelectionUI();
@@ -2334,7 +2380,7 @@ attackBtn.addEventListener('pointermove', (e) => {
   if (btnDrag.moved){
     closeReticleMenu();
     const nx = Math.max(8, Math.min(window.innerWidth - 64, e.clientX - btnDrag.ox));
-    const ny = Math.max(44, Math.min(window.innerHeight - 104, e.clientY - btnDrag.oy));
+    const ny = Math.max(66, Math.min(window.innerHeight - 104, e.clientY - btnDrag.oy));
     reticleWrapEl.style.left = nx + 'px';
     reticleWrapEl.style.top = ny + 'px';
     reticleWrapEl.style.right = 'auto';
