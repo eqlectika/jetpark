@@ -77,6 +77,10 @@ canvas{
   display:flex;align-items:center;justify-content:center;
   cursor:grab;touch-action:none;
 }
+#attackBtn.locked{
+  color:#38bdf8;
+  filter:drop-shadow(0 0 6px rgba(56,189,248,.85));
+}
 #attackBtn.active{
   color:#fb7185;
   filter:drop-shadow(0 0 6px rgba(251,113,133,.75));
@@ -1176,6 +1180,30 @@ sixDirections.forEach((_, dirIndex) => {
 
 const centerObjects = [];
 const animatedGyroParts = [];
+const _squareHalf = 4.6;
+const _squarePoints = [
+  new THREE.Vector3(-_squareHalf, _squareHalf, 0),
+  new THREE.Vector3(_squareHalf, _squareHalf, 0),
+  new THREE.Vector3(_squareHalf, -_squareHalf, 0),
+  new THREE.Vector3(-_squareHalf, -_squareHalf, 0)
+];
+const _squareGeo = new THREE.BufferGeometry().setFromPoints([
+  _squarePoints[0], _squarePoints[1],
+  _squarePoints[1], _squarePoints[2],
+  _squarePoints[2], _squarePoints[3],
+  _squarePoints[3], _squarePoints[0]
+]);
+const lockSquareMesh = new THREE.LineSegments(
+  _squareGeo,
+  new THREE.LineBasicMaterial({
+    color: 0x38bdf8,
+    transparent: true,
+    opacity: 0.95,
+    depthTest: false
+  })
+);
+lockSquareMesh.visible = false;
+scene.add(lockSquareMesh);
 
 /* [PERF OPT] Shared materials for arches (huge win on draw-call reduction) */
 const sharedArchMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.55, metalness: 0.35 });
@@ -2131,7 +2159,53 @@ function findNearestPeer(maxDist = 65){
   }
   return bestId;
 }
+function findBestTargetInCone(candidates, maxRange = 120, minCosAngle = 0.86){
+  camera.updateMatrixWorld();
+  const origin = camera.getWorldPosition(_tmpVec4);
+  const forward = _tmpVec5.set(0, 0, -1).applyQuaternion(camera.getWorldQuaternion(_tmpQuat1)).normalize();
 
+  let bestItem = null;
+  let bestScore = Infinity;
+
+  for (const item of candidates){
+    _tmpVec1.copy(item.pos).sub(origin);
+    const dist = _tmpVec1.length();
+    if (dist < 0.001 || dist > maxRange) continue;
+    _tmpVec1.divideScalar(dist);
+    const cosAngle = forward.dot(_tmpVec1);
+    if (cosAngle < minCosAngle) continue;
+
+    const anglePenalty = (1 - cosAngle) * 250;
+    const score = dist + anglePenalty;
+    if (score < bestScore){
+      bestScore = score;
+      bestItem = item;
+    }
+  }
+  return bestItem;
+}
+
+function findPeerInCone(maxRange = 120, minCosAngle = 0.86){
+  const list = [];
+  for (const [pid, entry] of remotePeers.entries()){
+    list.push({ id: pid, pos: entry.mesh.position });
+  }
+  const hit = findBestTargetInCone(list, maxRange, minCosAngle);
+  return hit ? hit.id : null;
+}
+
+function findHackableBuildingInCone(maxRange = 120, minCosAngle = 0.86){
+  const list = [];
+  for (const b of buildings){
+    if (b.owner === myPeerId || (b.storedTokens || 0) <= 0) continue;
+    list.push({
+      building: b,
+      pos: new THREE.Vector3(b.x, b.y, b.z)
+    });
+  }
+  const hit = findBestTargetInCone(list, maxRange, minCosAngle);
+  return hit ? hit.building : null;
+}
 function startSelectedAction(){
   closeReticleMenu();
   if (Date.now() < frozenUntil) return;
@@ -2141,9 +2215,9 @@ function startSelectedAction(){
 
   const aimPt = getAimedWorldPoint();
 
-  if (selectedReticleMode === 'hack'){
-    const nearPeer = findNearestPeer(65);
-    const nearB = findNearestBuilding(aimPt, 35) || findNearestBuilding(player.position, 35);
+if (selectedReticleMode === 'hack'){
+    const nearPeer = findPeerInCone(120, 0.86);
+    const nearB = findHackableBuildingInCone(120, 0.86);
     if (nearPeer){
       holdMode = 'hack_peer';
       targetPeerId = nearPeer;
@@ -2155,7 +2229,7 @@ function startSelectedAction(){
       publishMqtt({ type: 'PEER_HACK_ALERT', target: nearPeer, attacker: myPeerId });
       return;
     }
-    if (!nearB || nearB.owner === myPeerId || (nearB.storedTokens || 0) <= 0) return;
+    if (!nearB) return;
     holdMode = 'hack';
     targetBuildingId = nearB.id;
     targetPeerId = null;
@@ -2165,7 +2239,7 @@ function startSelectedAction(){
     attackBtn.classList.add('active');
     publishMqtt({ type: 'BUILDING_ALERT', buildingId: nearB.id, owner: nearB.owner, attacker: myPeerId });
   } else if (selectedReticleMode === 'attack'){
-    const nearP = findNearestPeer(55);
+    const nearP = findPeerInCone(120, 0.86);
     if (!nearP || Date.now() < freezeCooldownUntil) return;
     holdMode = 'attack';
     targetPeerId = nearP;
@@ -2256,7 +2330,6 @@ attackBtn.addEventListener('pointermove', (e) => {
   if (!btnDrag.active) return;
   if (Math.hypot(e.clientX - btnDrag.sx, e.clientY - btnDrag.sy) > 8){
     btnDrag.moved = true;
-    clearLongPressTimer();
   }
   if (btnDrag.moved){
     closeReticleMenu();
@@ -2679,11 +2752,10 @@ function updateHoldActions(nowMs){
         publishMqtt({ type: 'BUILDING_BUILT', building: b });
       }
     }
-  } else if (holdMode === 'hack' && targetBuildingId){
-    const warningMs = 9000;
+} else if (holdMode === 'hack' && targetBuildingId){
+    const warningMs = 1000;
     if (elapsed >= warningMs){
-      const drainStep = Math.floor((elapsed - warningMs) / 700);
-      if (drainStep > lastDrainStep){
+      const drainStep = Math.floor((elapsed - warningMs) / 600);      if (drainStep > lastDrainStep){
         lastDrainStep = drainStep;
         const b = buildingById.get(targetBuildingId);
         if (b && (b.storedTokens || 0) > 0){
@@ -2699,8 +2771,7 @@ function updateHoldActions(nowMs){
     }
   } else if (holdMode === 'hack_peer' && targetPeerId){
     const peerEntry = remotePeers.get(targetPeerId);
-    if (!peerEntry || player.position.distanceToSquared(peerEntry.mesh.position) > 85 * 85){
-      stopHoldAction();
+if (!peerEntry || player.position.distanceToSquared(peerEntry.mesh.position) > 240 * 240){      stopHoldAction();
       return;
     }
     const stealStep = Math.floor(elapsed / 850);
@@ -2753,7 +2824,33 @@ wireToggleBtn.addEventListener('click', () => {
 });
 
 applyWireframeMode(wireframeMode);
+function updateConeLockIndicator(){
+  let lockedPos = null;
+  if (selectedReticleMode === 'hack'){
+    const peerId = findPeerInCone(120, 0.86);
+    if (peerId && remotePeers.has(peerId)){
+      lockedPos = remotePeers.get(peerId).mesh.position;
+    } else {
+      const b = findHackableBuildingInCone(120, 0.86);
+      if (b) lockedPos = _tmpVec2.set(b.x, b.y, b.z);
+    }
+  } else if (selectedReticleMode === 'attack'){
+    const peerId = findPeerInCone(120, 0.86);
+    if (peerId && remotePeers.has(peerId)){
+      lockedPos = remotePeers.get(peerId).mesh.position;
+    }
+  }
 
+  if (lockedPos && !isHoldingAttack){
+    attackBtn.classList.add('locked');
+    lockSquareMesh.visible = true;
+    lockSquareMesh.position.copy(lockedPos);
+    lockSquareMesh.quaternion.copy(camera.getWorldQuaternion(_tmpQuat2));
+  } else {
+    attackBtn.classList.remove('locked');
+    lockSquareMesh.visible = false;
+  }
+}
 function animate(){
   requestAnimationFrame(animate);
   const dt = Math.min(0.05, clock.getDelta());
@@ -2881,7 +2978,7 @@ for (let i = 0; i < routeRings.length; i++){
     savedRingCooldowns[i] = ring.cooldownUntil;
     cooldownsChanged = true;
     recordTokenDelta(2, 'Route ring', false);
-  }
+  } 
 }
 if (cooldownsChanged){
   store.set('ring_cooldowns', savedRingCooldowns);
@@ -2900,6 +2997,7 @@ updateRouteRingsFade(nowMs);
     planet.mesh.rotation.x += planet.rotSpeed * 0.2;
   }
 
+updateConeLockIndicator();
   renderer.render(scene, camera);
 }
 
