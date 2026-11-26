@@ -386,7 +386,6 @@ canvas#statsChart:active{cursor:grabbing}
     <p><strong>Free Flight &amp; Gravity:</strong> Fly in any direction indefinitely. Gravity is zero at the planet center and zero at the matching outer height.</p>
     <p><strong>Rings & Buildings:</strong> Fly through the rings to collect tokens and build houses.</p>
     <p><strong>Hack Houses &amp; Flyers:</strong> Hack stored tokens from other players' buildings or hack nearby players mid-flight.</p>
-    <p><strong>Name:</strong> Tap the name in the top right corner, type anything you like, then press Enter.</p>
     <div class="help-footer-logo">
       <a href="https://eugenebox.t.me" target="_blank" rel="noopener noreferrer" title="Telegram">
         <img src="fleurdelis.png" alt="Fleur-de-lis">
@@ -555,15 +554,28 @@ const reticleWrapEl = document.getElementById('reticleWrap');
 const reticleMenu = document.getElementById('reticleMenu');
 const peerLabelsLayer = document.getElementById('peerLabelsLayer');
 
-peerIdInput.value = myPeerId;
-tokenBalanceEl.textContent = Number.isInteger(tokens) ? tokens : tokens.toFixed(1);
+const startButtonEl = document.getElementById('startButton');
+const isStandalonePwa =
+  window.matchMedia('(display-mode: standalone)').matches ||
+  window.navigator.standalone === true;
+const isIosDevice =
+  /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const canRequestFullscreen =
+  typeof document.documentElement.requestFullscreen === 'function' ||
+  typeof document.documentElement.webkitRequestFullscreen === 'function';
 
-document.getElementById('startButton').addEventListener('click', () => {
-  document.getElementById('startButton').style.display = 'none';
+if (!isStandalonePwa && !isIosDevice && canRequestFullscreen){
+  startButtonEl.style.display = 'block';
+}
+
+startButtonEl.addEventListener('click', () => {
+  startButtonEl.style.display = 'none';
   if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
   else if (document.documentElement.webkitRequestFullscreen) document.documentElement.webkitRequestFullscreen();
   if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
 });
+
 
 let currentThrottle = 0;
 let touchJoystick = { active: false, startX: 0, startY: 0, moveX: 0, moveY: 0 };
@@ -1629,14 +1641,22 @@ const backgroundPlanets = [];
 /* =========================================================
    MQTT MULTIPLAYER
    ========================================================= */
-const BROKER = 'wss://broker.emqx.io:8084/mqtt';
+
+const BROKERS = [
+  'wss://broker.emqx.io:8084/mqtt',
+  'wss://test.mosquitto.org:8081'
+];
 const TOPIC = 'outside_in_planet/megacity/v1';
+let currentBrokerIndex = 0;
 let mqttClient = null;
 const remotePeers = new Map();
 let activeRemoteAttacks = {};
 let hasMovedFromOrigin = false;
 /* [PERF OPT] Only publish STATE when position actually changed */
 let lastPublishedPos = { x: 0, y: 0, z: 0 };
+const seenMsgKeys = new Map();
+let lastStatePublishMs = 0;
+
 
 function createPeerSubjectGroup(labelText){
   const group = new THREE.Group();
@@ -1734,11 +1754,139 @@ function updatePresenceUI(){
   }
 }
 
+function publishCurrentState(force = false){
+  const now = Date.now();
+  const dx = player.position.x - lastPublishedPos.x;
+  const dy = player.position.y - lastPublishedPos.y;
+  const dz = player.position.z - lastPublishedPos.z;
+  const movedEnough = (dx * dx + dy * dy + dz * dz) > 1.0;
+  if (!force && !movedEnough && (now - lastStatePublishMs) < 4000) return;
+
+  publishMqtt({
+    type: 'STATE',
+    pos: [
+      Number(player.position.x.toFixed(2)),
+      Number(player.position.y.toFixed(2)),
+      Number(player.position.z.toFixed(2))
+    ]
+  });
+  lastPublishedPos.x = player.position.x;
+  lastPublishedPos.y = player.position.y;
+  lastPublishedPos.z = player.position.z;
+  lastStatePublishMs = now;
+}
+
 function publishMqtt(payload){
   if (mqttClient && mqttClient.connected){
-    mqttClient.publish(TOPIC, JSON.stringify({ ...payload, sender: myPeerId, sid: clientId, ts: Date.now() }), { qos: 0 });
+    mqttClient.publish(
+      TOPIC,
+      JSON.stringify({ ...payload, sender: myPeerId, sid: clientId, ts: Date.now() }),
+      { qos: 0 }
+    );
   }
 }
+
+function isDuplicateMqttMessage(data){
+  const key = `${data.sid || ''}|${data.sender || ''}|${data.type || ''}|${data.ts || 0}`;
+  const now = Date.now();
+  for (const [k, exp] of seenMsgKeys.entries()){
+    if (exp < now) seenMsgKeys.delete(k);
+  }
+  if (seenMsgKeys.has(key)) return true;
+  seenMsgKeys.set(key, now + 5000);
+  return false;
+}
+
+function connectMqttBroker(index = 0){
+  currentBrokerIndex = index % BROKERS.length;
+  const brokerUrl = BROKERS[currentBrokerIndex];
+  if (mqttClient){
+    try{ mqttClient.removeAllListeners(); mqttClient.end(true); }catch{}
+    mqttClient = null;
+  }
+
+  let failCount = 0;
+  try{
+    mqttClient = mqtt.connect(brokerUrl, {
+      clientId,
+      reconnectPeriod: 2500,
+      connectTimeout: 4000,
+      keepalive: 45,
+      clean: true
+    });
+
+    mqttClient.on('connect', () => {
+      failCount = 0;
+      mqttClient.subscribe(TOPIC, { qos: 0 });
+      publishCurrentState(true);
+      publishMqtt({ type: 'SYNC_REQUEST' });
+    });
+
+    mqttClient.on('error', () => {
+      failCount++;
+      if (failCount >= 2){
+        connectMqttBroker(currentBrokerIndex + 1);
+      }
+    });
+
+    mqttClient.on('message', (_, raw) => {
+      let data;
+      try{ data = JSON.parse(raw.toString()); }catch{ return; }
+      if (!data || data.sid === clientId || (data.sender && data.sender === myPeerId)) return;
+      if (isDuplicateMqttMessage(data)) return;
+
+      if (data.type === 'STATE' && Array.isArray(data.pos) && data.pos.length === 3){
+        const entry = getOrCreateRemotePeer(data.sender || 'Peer');
+        entry.mesh.position.set(data.pos[0], data.pos[1], data.pos[2]);
+        entry.lastSeen = Date.now();
+        updatePresenceUI();
+      } else if (data.type === 'SYNC_REQUEST'){
+        publishCurrentState(true);
+        buildings.forEach((b) => {
+          if (b.owner === myPeerId){
+            publishMqtt({ type: 'BUILDING_BUILT', building: b });
+          }
+        });
+      } else if (data.type === 'CHAT' && typeof data.text === 'string'){
+        appendChatLine(data.sender || 'Peer', data.text);
+      } else if (data.type === 'TRANSFER' && data.to === myPeerId){
+        recordTokenDelta(data.amount, `Transfer from ${data.sender}`, false);
+      } else if (data.type === 'PEER_HACKED' && data.target === myPeerId){
+        const stolen = Math.min(tokens, Number(data.amount || 1));
+        if (stolen > 0){
+          recordTokenDelta(-stolen, `Hacked by ${data.attacker || data.sender || 'peer'}`, true);
+        }
+      } else if (data.type === 'BUILDING_BUILT' && data.building){
+        upsertBuildingMesh(data.building);
+        store.set('buildings', buildings);
+      } else if (data.type === 'BUILDING_LOOTED'){
+        const b = buildingById.get(data.buildingId);
+        if (b){
+          b.storedTokens = Math.max(0, (b.storedTokens || 0) - Number(data.amount || 0));
+          upsertBuildingMesh(b);
+          store.set('buildings', buildings);
+        }
+      } else if (data.type === 'AUTHOR_SHARE' && data.to === myPeerId){
+        const shareAmt = Number(data.amount || 0);
+        if (shareAmt > 0){
+          const srcLabel = data.source === 'house_build' ? 'House fee' : 'Transfer fee';
+          recordTokenDelta(shareAmt, `${srcLabel} from ${data.from || data.sender || 'peer'}`, false);
+        }
+      } else if (data.type === 'FREEZE_PLAYER' && data.target === myPeerId){
+        applyFreezeToSelf(data.durationMs || 6000);
+      } else if (data.type === 'FREEZE_STATE'){
+        if (data.active){
+          activeRemoteAttacks[data.target] = { attacker: data.attacker, until: Date.now() + (data.durationMs || 6000) };
+        } else {
+          delete activeRemoteAttacks[data.target];
+        }
+      }
+    });
+  }catch{
+    setTimeout(() => connectMqttBroker(currentBrokerIndex + 1), 2500);
+  }
+}
+
 
 function appendChatLine(sender, text){
   const div = document.createElement('div');
@@ -1752,79 +1900,14 @@ function appendChatLine(sender, text){
   chatFeed.scrollTop = chatFeed.scrollHeight;
 }
 
-try{
-  mqttClient = mqtt.connect(BROKER, { clientId, reconnectPeriod: 4000, connectTimeout: 5000, keepalive: 60 });
-  mqttClient.on('connect', () => {
-    mqttClient.subscribe(TOPIC, { qos: 0 });
-    if (hasMovedFromOrigin && player.position.lengthSq() > 0.01){
-      publishMqtt({ type: 'STATE', pos: [player.position.x, player.position.y, player.position.z] });
-    }
-  });
-  mqttClient.on('message', (_, raw) => {
-    let data;
-    try{ data = JSON.parse(raw.toString()); }catch{ return; }
-    if (data.sid === clientId || (data.sender && data.sender === myPeerId)) return;
+connectMqttBroker(0);
 
-    if (data.type === 'STATE' && Array.isArray(data.pos) && data.pos.length === 3){
-      const entry = getOrCreateRemotePeer(data.sender || 'Peer');
-      entry.mesh.position.set(data.pos[0], data.pos[1], data.pos[2]);
-      entry.lastSeen = Date.now();
-      updatePresenceUI();
-    } else if (data.type === 'CHAT' && typeof data.text === 'string'){
-      appendChatLine(data.sender || 'Peer', data.text);
-    } else if (data.type === 'TRANSFER' && data.to === myPeerId){
-      recordTokenDelta(data.amount, `Transfer from ${data.sender}`, false);
-    } else if (data.type === 'PEER_HACKED' && data.target === myPeerId){
-      const stolen = Math.min(tokens, Number(data.amount || 1));
-      if (stolen > 0){
-        recordTokenDelta(-stolen, `Hacked by ${data.attacker || data.sender || 'peer'}`, true);
-      }
-    } else if (data.type === 'BUILDING_BUILT'){
-      upsertBuildingMesh(data.building);
-      store.set('buildings', buildings);
-    } else if (data.type === 'BUILDING_LOOTED'){
-      const b = buildingById.get(data.buildingId);
-      if (b){
-        b.storedTokens = Math.max(0, (b.storedTokens || 0) - data.amount);
-        upsertBuildingMesh(b);
-        store.set('buildings', buildings);
-      }
-    } else if (data.type === 'AUTHOR_SHARE' && data.to === myPeerId){
-      const shareAmt = Number(data.amount || 0);
-      if (shareAmt > 0){
-        const srcLabel = data.source === 'house_build' ? 'House fee' : 'Transfer fee';
-        recordTokenDelta(shareAmt, `${srcLabel} from ${data.from || data.sender || 'peer'}`, false);
-      }
-    } else if (data.type === 'FREEZE_PLAYER' && data.target === myPeerId){
-      applyFreezeToSelf(data.durationMs || 6000);
-    } else if (data.type === 'FREEZE_STATE'){
-      if (data.active){
-        activeRemoteAttacks[data.target] = { attacker: data.attacker, until: Date.now() + (data.durationMs || 6000) };
-      } else {
-        delete activeRemoteAttacks[data.target];
-      }
-    }
-  });
-}catch{}
 
 setInterval(() => {
-  if (hasMovedFromOrigin && player.position.lengthSq() > 0.01){
-    /* [PERF OPT] Don't spam STATE if position hasn't moved */
-    const dx = player.position.x - lastPublishedPos.x;
-    const dy = player.position.y - lastPublishedPos.y;
-    const dz = player.position.z - lastPublishedPos.z;
-    if (dx * dx + dy * dy + dz * dz > 1.0){
-      publishMqtt({
-        type: 'STATE',
-        pos: [Number(player.position.x.toFixed(2)), Number(player.position.y.toFixed(2)), Number(player.position.z.toFixed(2))]
-      });
-      lastPublishedPos.x = player.position.x;
-      lastPublishedPos.y = player.position.y;
-      lastPublishedPos.z = player.position.z;
-    }
-  }
+  publishCurrentState(false);
   updatePresenceUI();
 }, 1500);
+
 
 function sendChat(){
   const txt = chatInput.value.trim();
@@ -1836,17 +1919,21 @@ function sendChat(){
 chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter'){ e.preventDefault(); sendChat(); } });
 
 peerIdInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') peerIdInput.blur(); });
+
 peerIdInput.addEventListener('blur', () => {
   const v = peerIdInput.value.trim();
   if (/^[A-Za-z0-9_\-]{3,12}$/.test(v)){
     myPeerId = v;
     store.set('peer_id', myPeerId);
+    publishCurrentState(true);
     peerIdInput.classList.add('saved');
     setTimeout(() => peerIdInput.classList.remove('saved'), 700);
   } else {
     peerIdInput.value = myPeerId;
   }
 });
+
+
 
 /* =========================================================
    RETICLE
@@ -2423,21 +2510,32 @@ document.getElementById('sendTokensBtn').addEventListener('click', () => {
   renderExpenseHistory();
 });
 
-function openStats(){
+function refreshRecipientSelect(){
+  const prevVal = recipientSelect.value;
   recipientSelect.innerHTML = '';
   const peerKeys = Array.from(remotePeers.keys()).filter(k => k !== myPeerId);
   if (!peerKeys.length){
     const opt = document.createElement('option');
-    opt.value = ''; opt.textContent = 'No online peers';
+    opt.value = '';
+    opt.textContent = 'No online peers';
     recipientSelect.appendChild(opt);
   } else {
     peerKeys.forEach(k => {
       const opt = document.createElement('option');
-      opt.value = k; opt.textContent = k;
+      opt.value = k;
+      opt.textContent = k;
       recipientSelect.appendChild(opt);
     });
+    if (prevVal && peerKeys.includes(prevVal)){
+      recipientSelect.value = prevVal;
+    }
   }
+}
+
+function openStats(){
+  refreshRecipientSelect();
   selectedExpenseIds.clear();
+
   syncTimeframeUI();
   statsModal.classList.add('show');
   drawChart();
