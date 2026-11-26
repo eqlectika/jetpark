@@ -531,8 +531,21 @@ let selectedExpenseIds = new Set();
 let buildings = Array.isArray(store.get('buildings', null)) ? store.get('buildings', []) : [];
 let selectedTimeframe = store.get('chart_timeframe', 'day');
 if (!['day', 'week', 'month', 'all'].includes(selectedTimeframe)) selectedTimeframe = 'day';
-
+function normalizeExpenseHistory(list){
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((item) => {
+      if (!item || typeof item !== 'object') return false;
+      const amt = Number(item.amount);
+      if (!Number.isFinite(amt) || amt <= 0) return false;
+      const reasonStr = String(item.reason || '');
+      if (/^withdraw/i.test(reasonStr) && amt <= 0) return false;
+      return true;
+    })
+    .slice(0, 200);
+}
 function saveEconomy(){
+  expenseHistory = normalizeExpenseHistory(expenseHistory);
   store.set('tokens', tokens);
   store.set('token_series', tokenSeries.slice(-300));
   store.set('expense_history', expenseHistory);
@@ -544,20 +557,24 @@ function recordTokenDelta(delta, reason, isExpense = false){
   tokens = Math.max(0, Number((tokens + numDelta).toFixed(2)));
   const actualDelta = Number((tokens - prevTokens).toFixed(2));
   tokenSeries.push({ t: Date.now(), val: tokens });
-  if (actualDelta !== 0 || isExpense){
+  const reasonLabel = reason || (actualDelta >= 0 ? 'Incoming' : 'Expense');
+  const isEmptyWithdraw = /^withdraw/i.test(String(reasonLabel)) && Math.abs(actualDelta) <= 0;
+  if (!isEmptyWithdraw && (actualDelta !== 0 || isExpense)){
     const signedAmt = actualDelta !== 0 ? actualDelta : (isExpense ? -Math.abs(numDelta) : numDelta);
     const absAmt = Number(Math.abs(signedAmt).toFixed(2));
     if (absAmt > 0){
       expenseHistory.unshift({
         id: 'exp_' + Date.now() + '_' + Math.random().toString(16).slice(2, 6),
-        reason: reason || (signedAmt >= 0 ? 'Incoming' : 'Expense'),
+        reason: reasonLabel,
         amount: absAmt,
         direction: signedAmt >= 0 ? 'in' : 'out',
         ts: Date.now()
       });
+      expenseHistory = normalizeExpenseHistory(expenseHistory);
     }
   }
   saveEconomy();
+  
   tokenBalanceEl.textContent = Number.isInteger(tokens) ? tokens : tokens.toFixed(1);
   if (typeof statsModal !== 'undefined' && statsModal && statsModal.classList.contains('show')){
     drawChart();
@@ -1612,10 +1629,77 @@ const greenPatchMat = new THREE.MeshStandardMaterial({
 const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.85 });
 const treeCrownMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.65 });
 
-function addTreeAtDir(treeDir, side){
-  const treeUp = treeDir.clone().multiplyScalar(side);
-  const treeBaseR = PLANET_RADIUS + side * Math.max(0, getSurfaceSupportRadius(treeDir, side) - PLANET_RADIUS);
-  const treeBasePos = treeDir.clone().multiplyScalar(treeBaseR);
+function getUnevenSurfaceRadiusAtDir(dir, side, ignoreId = null){
+  const nDir = dir.clone().normalize();
+  const info = sampleTerrainAtDir(nDir);
+  if (info.isPassThrough){
+    return null;
+  }
+  const terrainR = side === -1 ? info.innerSolidR : info.outerSolidR;
+  const supportR = getSurfaceSupportRadius(nDir, side, ignoreId);
+  const supportOffset = Math.max(0, supportR - PLANET_RADIUS);
+  return terrainR + side * supportOffset;
+}
+
+function buildUnevenProjectedSquareGeometry(centerDir, side, patchSize, segs = 16){
+  const up = centerDir.clone().multiplyScalar(side);
+  let refAxis = new THREE.Vector3(0, 1, 0).cross(up);
+  if (refAxis.lengthSq() < 1e-4) refAxis = new THREE.Vector3(1, 0, 0).cross(up);
+  refAxis.normalize();
+  const bitangentAxis = new THREE.Vector3().crossVectors(up, refAxis).normalize();
+
+  const positions = [];
+  const indices = [];
+  const samplePt = new THREE.Vector3();
+
+  for (let iy = 0; iy <= segs; iy++){
+    const v = iy / segs;
+    const offsetV = ((v - 0.5) * patchSize) / PLANET_RADIUS;
+    for (let ix = 0; ix <= segs; ix++){
+      const u = ix / segs;
+      const offsetU = ((u - 0.5) * patchSize) / PLANET_RADIUS;
+
+      samplePt.copy(centerDir)
+        .addScaledVector(refAxis, offsetU)
+        .addScaledVector(bitangentAxis, offsetV)
+        .normalize();
+
+      const surfR = getUnevenSurfaceRadiusAtDir(samplePt, side);
+      const r = surfR !== null ? surfR : (side === -1 ? PLANET_RADIUS - 24 : PLANET_RADIUS + 18);
+      const lift = side * 0.4;
+      positions.push(
+        samplePt.x * (r + lift),
+        samplePt.y * (r + lift),
+        samplePt.z * (r + lift)
+      );
+    }
+  }
+
+  const rowStride = segs + 1;
+  for (let iy = 0; iy < segs; iy++){
+    for (let ix = 0; ix < segs; ix++){
+      const a = iy * rowStride + ix;
+      const b = a + 1;
+      const c = (iy + 1) * rowStride + ix;
+      const d = c + 1;
+      indices.push(a, c, b, b, c, d);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function addTreeOnUnevenSurface(treeDir, side){
+  const nDir = treeDir.clone().normalize();
+  const surfR = getUnevenSurfaceRadiusAtDir(nDir, side);
+  if (surfR === null) return false;
+
+  const treeUp = nDir.clone().multiplyScalar(side);
+  const treeBasePos = nDir.clone().multiplyScalar(surfR);
 
   const treeGroup = new THREE.Group();
   treeGroup.position.copy(treeBasePos);
@@ -1631,24 +1715,26 @@ function addTreeAtDir(treeDir, side){
 
   treeGroup.add(trunk, crown);
   greeningGroup.add(treeGroup);
+  return true;
 }
 
 function createGreenPatchAndTree(aimPoint){
   const pLen = player.position.length();
   const side = pLen < PLANET_RADIUS ? -1 : 1;
   const dir = aimPoint.lengthSq() > 1e-4 ? aimPoint.clone().normalize() : new THREE.Vector3(0, 1, 0);
-  const up = dir.clone().multiplyScalar(side);
 
-  const supportR = getSurfaceSupportRadius(dir, side);
-  const surfaceR = PLANET_RADIUS + side * Math.max(0, supportR - PLANET_RADIUS);
-  const patchPos = dir.clone().multiplyScalar(surfaceR).addScaledVector(up, 0.25);
+  if (sampleTerrainAtDir(dir).isPassThrough){
+    appendChatLine('System', 'Cannot plant on a pass-through zone');
+    return;
+  }
 
   const patchSize = 20;
-  const patchGeo = new THREE.PlaneGeometry(patchSize, patchSize);
+  const patchGeo = buildUnevenProjectedSquareGeometry(dir, side, patchSize, 16);
   const patchMesh = new THREE.Mesh(patchGeo, greenPatchMat);
-  patchMesh.position.copy(patchPos);
-  patchMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), up);
   greeningGroup.add(patchMesh);
+
+  const centerSurfR = getUnevenSurfaceRadiusAtDir(dir, side);
+  const patchPos = dir.clone().multiplyScalar(centerSurfR !== null ? centerSurfR : PLANET_RADIUS);
 
   let nearestCenter = null;
   let bestCenterDistSq = Infinity;
@@ -1681,25 +1767,30 @@ function createGreenPatchAndTree(aimPoint){
   }
 
   const maxOffsetRad = (patchSize * 0.35) / PLANET_RADIUS;
+  let plantedCount = 0;
+
   if (attractionTarget){
+    const up = dir.clone().multiplyScalar(side);
     const targetDir = attractionTarget.clone().normalize();
     const toTarget = targetDir.clone().sub(dir.clone().multiplyScalar(targetDir.dot(dir)));
     if (toTarget.lengthSq() > 1e-6){
       toTarget.normalize();
       const perp = new THREE.Vector3().crossVectors(up, toTarget).normalize();
+
       const dirToCenter = dir.clone().addScaledVector(toTarget, maxOffsetRad).normalize();
-      addTreeAtDir(dirToCenter, side);
+      if (addTreeOnUnevenSurface(dirToCenter, side)) plantedCount++;
 
       const dirSecond = dir.clone()
         .addScaledVector(toTarget, maxOffsetRad * 0.7)
         .addScaledVector(perp, maxOffsetRad * 0.45)
         .normalize();
-      addTreeAtDir(dirSecond, side);
-      return;
+      if (addTreeOnUnevenSurface(dirSecond, side)) plantedCount++;
     }
   }
 
-  addTreeAtDir(dir, side);
+  if (plantedCount === 0){
+    addTreeOnUnevenSurface(dir, side);
+  }
 }
 function doesOverlapExistingBuilding(candidatePos, candidateRadius, ignoreId = null){
   for (const b of buildings){
@@ -1739,20 +1830,31 @@ function getAimedWorldPoint(){
   const c = camPos.lengthSq() - PLANET_RADIUS * PLANET_RADIUS;
   const disc = b * b - c;
 
-  if (disc >= 0){
+if (disc >= 0){
     const sqrtDisc = Math.sqrt(disc);
     const tNear = -b - sqrtDisc;
     const tFar = -b + sqrtDisc;
+    const baseT = playerSide === 1
+      ? (tNear > 0.1 ? tNear : (tFar > 0.1 ? tFar : null))
+      : (tFar > 0.1 ? tFar : null);
 
-    if (playerSide === 1){
-      if (tNear > 0.1) return _tmpVec5.copy(camPos).addScaledVector(rayDir, tNear).clone();
-      if (tFar > 0.1) return _tmpVec5.copy(camPos).addScaledVector(rayDir, tFar).clone();
-    } else {
-      if (tFar > 0.1) return _tmpVec5.copy(camPos).addScaledVector(rayDir, tFar).clone();
+    if (baseT !== null){
+      const pt = _tmpVec5.copy(camPos).addScaledVector(rayDir, baseT);
+      const len = pt.length();
+      if (len > 0.001){
+        const hitDir = pt.divideScalar(len);
+        const surfR = getUnevenSurfaceRadiusAtDir(hitDir, playerSide);
+        if (surfR !== null){
+          return hitDir.clone().multiplyScalar(surfR);
+        }
+      }
+      return pt.clone();
     }
   }
 
-  return rayDir.clone().multiplyScalar(PLANET_RADIUS);
+  const fallbackDir = rayDir.clone().normalize();
+  const fallbackSurfR = getUnevenSurfaceRadiusAtDir(fallbackDir, playerSide);
+  return fallbackDir.multiplyScalar(fallbackSurfR !== null ? fallbackSurfR : PLANET_RADIUS);
 }
 
 function computePlacementOnPlayerSide(aimPoint){
@@ -2138,6 +2240,14 @@ function appendChatLine(sender, text){
   chatFeed.appendChild(div);
   while (chatFeed.children.length > 5) chatFeed.removeChild(chatFeed.firstChild);
   chatFeed.scrollTop = chatFeed.scrollHeight;
+
+  if (sender === 'System'){
+    setTimeout(() => {
+      if (div.parentNode === chatFeed){
+        chatFeed.removeChild(div);
+      }
+    }, 5000);
+  }
 }
 
 connectMqttBroker();
@@ -2699,8 +2809,9 @@ deleteSelectedHistBtn.addEventListener('click', () => {
 });
 
 function withdrawFromHouse(b, idx){
-  const amt = b.storedTokens || 0;
-  if (amt <= 0) return 0;
+  if (!b) return 0;
+  const amt = Number(b.storedTokens || 0);
+  if (!Number.isFinite(amt) || amt <= 0) return 0;
   b.storedTokens = 0;
   upsertBuildingMesh(b);
   store.set('buildings', buildings);
