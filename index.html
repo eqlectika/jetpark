@@ -93,6 +93,10 @@ canvas{
   color:#fda4af;
   border-color:rgba(251,113,133,.55);
 }
+#reticleModeTag.mode-plant{
+  color:#86efac;
+  border-color:rgba(74,222,128,.55);
+}
 #reticleModeTag.mode-hack{
   color:#7dd3fc;
   border-color:rgba(56,189,248,.55);
@@ -341,6 +345,7 @@ canvas#statsChart:active{cursor:grabbing}
 
 <div id="reticleMenu">
   <button class="rm-item selected" data-mode="build">Build</button>
+  <button class="rm-item" data-mode="plant">Plant</button>
   <button class="rm-item" data-mode="attack">Attack</button>
   <button class="rm-item" data-mode="hack">Hack</button>
   <div class="rm-hint">Long-press the crosshair to activate the mode</div>
@@ -1514,7 +1519,17 @@ function getHouseEdgeMaterial(color){
   }
   return houseEdgeMatCache.get(color);
 }
-
+function getLandSurfaceRadiusAtDir(dir, side, ignoreId = null){
+  const nDir = dir.clone().normalize();
+  const info = sampleTerrainAtDir(nDir);
+  if (info.isPassThrough){
+    return null;
+  }
+  const baseTerrainR = side === -1 ? info.innerSolidR : info.outerSolidR;
+  const supportR = getSurfaceSupportRadius(nDir, side, ignoreId);
+  const supportOffset = Math.max(0, supportR - PLANET_RADIUS);
+  return baseTerrainR + side * supportOffset;
+}
 function upsertBuildingMesh(b){
   const existing = buildingById.get(b.id);
   if (existing) existing.storedTokens = b.storedTokens;
@@ -1584,7 +1599,108 @@ function upsertBuildingMesh(b){
   collidableObjects.push(houseMesh);
 }
 buildings.forEach(upsertBuildingMesh);
+const greeningGroup = new THREE.Group();
+scene.add(greeningGroup);
+const greenPatchMat = new THREE.MeshStandardMaterial({
+  color: 0x22c55e,
+  roughness: 0.75,
+  metalness: 0.05,
+  transparent: true,
+  opacity: 0.72,
+  side: THREE.DoubleSide
+});
+const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.85 });
+const treeCrownMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.65 });
 
+function addTreeAtDir(treeDir, side){
+  const treeUp = treeDir.clone().multiplyScalar(side);
+  const treeBaseR = PLANET_RADIUS + side * Math.max(0, getSurfaceSupportRadius(treeDir, side) - PLANET_RADIUS);
+  const treeBasePos = treeDir.clone().multiplyScalar(treeBaseR);
+
+  const treeGroup = new THREE.Group();
+  treeGroup.position.copy(treeBasePos);
+  treeGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), treeUp);
+
+  const trunkGeo = new THREE.CylinderGeometry(0.45, 0.75, 4.2, 8);
+  const trunk = new THREE.Mesh(trunkGeo, treeTrunkMat);
+  trunk.position.y = 2.1;
+
+  const crownGeo = new THREE.ConeGeometry(2.8, 6.8, 10);
+  const crown = new THREE.Mesh(crownGeo, treeCrownMat);
+  crown.position.y = 6.4;
+
+  treeGroup.add(trunk, crown);
+  greeningGroup.add(treeGroup);
+}
+
+function createGreenPatchAndTree(aimPoint){
+  const pLen = player.position.length();
+  const side = pLen < PLANET_RADIUS ? -1 : 1;
+  const dir = aimPoint.lengthSq() > 1e-4 ? aimPoint.clone().normalize() : new THREE.Vector3(0, 1, 0);
+  const up = dir.clone().multiplyScalar(side);
+
+  const supportR = getSurfaceSupportRadius(dir, side);
+  const surfaceR = PLANET_RADIUS + side * Math.max(0, supportR - PLANET_RADIUS);
+  const patchPos = dir.clone().multiplyScalar(surfaceR).addScaledVector(up, 0.25);
+
+  const patchSize = 20;
+  const patchGeo = new THREE.PlaneGeometry(patchSize, patchSize);
+  const patchMesh = new THREE.Mesh(patchGeo, greenPatchMat);
+  patchMesh.position.copy(patchPos);
+  patchMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), up);
+  greeningGroup.add(patchMesh);
+
+  let nearestCenter = null;
+  let bestCenterDistSq = Infinity;
+  for (let i = 0; i < centerObjects.length; i++){
+    const c = centerObjects[i];
+    if (c.spec.side !== side) continue;
+    const dSq = patchPos.distanceToSquared(c.group.position);
+    if (dSq < bestCenterDistSq){
+      bestCenterDistSq = dSq;
+      nearestCenter = c;
+    }
+  }
+
+  let nearestBuildingPos = null;
+  let bestBuildingDistSq = Infinity;
+  for (let i = 0; i < buildings.length; i++){
+    const b = buildings[i];
+    if (getBuildingSide(b) !== side) continue;
+    const bPos = new THREE.Vector3(b.x, b.y, b.z);
+    const dSq = patchPos.distanceToSquared(bPos);
+    if (dSq < bestBuildingDistSq){
+      bestBuildingDistSq = dSq;
+      nearestBuildingPos = bPos;
+    }
+  }
+
+  let attractionTarget = nearestCenter ? nearestCenter.group.position : null;
+  if (nearestBuildingPos && (!attractionTarget || bestBuildingDistSq < bestCenterDistSq)){
+    attractionTarget = nearestBuildingPos;
+  }
+
+  const maxOffsetRad = (patchSize * 0.35) / PLANET_RADIUS;
+  if (attractionTarget){
+    const targetDir = attractionTarget.clone().normalize();
+    const toTarget = targetDir.clone().sub(dir.clone().multiplyScalar(targetDir.dot(dir)));
+    if (toTarget.lengthSq() > 1e-6){
+      toTarget.normalize();
+      const perp = new THREE.Vector3().crossVectors(up, toTarget).normalize();
+      const dirToCenter = dir.clone().addScaledVector(toTarget, maxOffsetRad).normalize();
+      addTreeAtDir(dirToCenter, side);
+
+      const dirSecond = dir.clone()
+        .addScaledVector(toTarget, maxOffsetRad * 0.7)
+        .addScaledVector(perp, maxOffsetRad * 0.45)
+        .normalize();
+      addTreeAtDir(dirSecond, side);
+      return;
+    }
+  }
+
+  addTreeAtDir(dir, side);
+}
 function doesOverlapExistingBuilding(candidatePos, candidateRadius, ignoreId = null){
   for (const b of buildings){
     if (ignoreId && b.id === ignoreId) continue;
@@ -2296,6 +2412,11 @@ if (selectedReticleMode === 'hack'){
     publishMqtt({ type: 'FREEZE_PLAYER', target: nearP, attacker: myPeerId, durationMs: durMs });
     publishMqtt({ type: 'FREEZE_STATE', target: nearP, attacker: myPeerId, active: true, durationMs: durMs });
     freezeCooldownUntil = Date.now() + 7500;
+} else if (selectedReticleMode === 'plant'){
+    if (tokens < 1) return;
+    recordTokenDelta(-1, 'Plant greening', true);
+    createGreenPatchAndTree(aimPt);
+    appendChatLine('System', 'Planted green patch and tree near center');
   } else {
     if (tokens < 1) return;
     const placed = computePlacementOnPlayerSide(aimPt);
