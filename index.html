@@ -497,18 +497,38 @@ const _tmpQuat1 = new THREE.Quaternion();
 const _tmpQuat2 = new THREE.Quaternion();
 const _tmpEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 
-const memoryStore = {};
+const memoryStore = (() => {
+  try{
+    if (window.name && window.name.startsWith('OIP_STORE:')){
+      return JSON.parse(window.name.slice('OIP_STORE:'.length)) || {};
+    }
+  }catch{}
+  return {};
+})();
+
+function syncWindowNameStore(){
+  try{
+    window.name = 'OIP_STORE:' + JSON.stringify(memoryStore);
+  }catch{}
+}
+
 const store = {
   get(k, fb){
     const key = 'oip_' + k;
     try{
       const v = localStorage.getItem(key);
-      if (v !== null) return JSON.parse(v);     }catch{}
+      if (v !== null){
+        const parsed = JSON.parse(v);
+        memoryStore[key] = parsed;
+        return parsed;
+      }
+    }catch{}
     return Object.prototype.hasOwnProperty.call(memoryStore, key) ? memoryStore[key] : fb;
   },
   set(k, v){
     const key = 'oip_' + k;
     memoryStore[key] = v;
+    syncWindowNameStore();
     try{ localStorage.setItem(key, JSON.stringify(v)); }catch{}
   }
 };
@@ -603,6 +623,7 @@ const peerIdInput = document.getElementById('peerIdInput');
   peerIdInput.value = myPeerId;
 const presenceBadge = document.getElementById('presenceBadge');
 const tokenBalanceEl = document.getElementById('tokenBalanceEl');
+  tokenBalanceEl.textContent = Number.isInteger(tokens) ? tokens : tokens.toFixed(1);
 const chatFeed = document.getElementById('chatFeed');
 const chatInput = document.getElementById('chatInput');
 const attackBtn = document.getElementById('attackBtn');
@@ -2301,6 +2322,7 @@ peerIdInput.addEventListener('blur', () => {
 window.addEventListener('pagehide', () => {
   applyPeerIdInput(false);
   store.set('peer_id', myPeerId);
+  saveEconomy();
 });
 
 
