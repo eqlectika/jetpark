@@ -301,19 +301,10 @@ canvas#statsChart:active{cursor:grabbing}
 }
 #wireToggleBtn.on{ color:#fbbf24; }
 #nameToggleBtn.off{ color:#94a3b8; }
-#statsModal,
-#statsModal button,
-#statsModal input,
-#statsModal select,
-#statsModal .hist-item,
-#statsModal .buildings-box {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont,
-               "Segoe UI", Roboto, sans-serif;
-}
-
-/* Unified statistics typography */
+/* Statistics typography and layout */
 #statsModal,
 #statsModal * {
+  box-sizing: border-box;
   font-family: system-ui, -apple-system, BlinkMacSystemFont,
                "Segoe UI", Roboto, sans-serif;
 }
@@ -322,9 +313,18 @@ canvas#statsChart:active{cursor:grabbing}
 #statsModal .buildings-box,
 #statsModal .b-row,
 #statsModal .transfer-row input,
-#statsModal .transfer-row select {
+#statsModal .transfer-row select,
+#statsModal .section-label {
   font-size: 12px;
   line-height: 1.35;
+}
+
+#statsModal .modal-card {
+  padding: 16px;
+}
+
+#statsModal .hist-list {
+  padding: 4px 8px;
 }
 
 #statsModal .hist-item {
@@ -337,7 +337,7 @@ canvas#statsChart:active{cursor:grabbing}
 }
 
 #statsModal .b-row {
-  padding: 5px 0;
+  padding: 5px 4px;
 }
 
 #statsModal .transfer-row input,
@@ -345,11 +345,14 @@ canvas#statsChart:active{cursor:grabbing}
   padding: 6px 8px;
 }
 
-#statsModal .section-label {
-  font-size: 12px;
-  line-height: 1.35;
+#statsModal canvas#statsChart,
+#statsModal .transfer-row,
+#statsModal .hist-list,
+#statsModal .buildings-box {
+  width: 100%;
+  margin-left: 0;
+  margin-right: 0;
 }
-
 </style>
 </head>
 <body>
