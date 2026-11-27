@@ -1799,15 +1799,11 @@ function upsertPlantMesh(p){
   if (sampleTerrainAtDir(dir).isPassThrough) return;
 
   const container = new THREE.Group();
-  const patchSize = 20;
-  const patchGeo = buildUnevenProjectedSquareGeometry(dir, side, patchSize, 16);
-  const patchMesh = new THREE.Mesh(patchGeo, greenPatchMat);
-  container.add(patchMesh);
+
 
   if (Array.isArray(p.trees) && p.trees.length){
-    p.trees.forEach(t => {
-      addTreeOnUnevenSurface(new THREE.Vector3(t[0], t[1], t[2]), side, container);
-    });
+    const t = p.trees[0];
+    addTreeOnUnevenSurface(new THREE.Vector3(t[0], t[1], t[2]), side, container);
   } else {
     addTreeOnUnevenSurface(dir, side, container);
   }
@@ -1832,61 +1828,7 @@ function createGreenPatchAndTree(aimPoint){
   const centerSurfR = getUnevenSurfaceRadiusAtDir(dir, side);
   const patchPos = dir.clone().multiplyScalar(centerSurfR !== null ? centerSurfR : PLANET_RADIUS);
 
-  let nearestCenter = null;
-  let bestCenterDistSq = Infinity;
-  for (let i = 0; i < centerObjects.length; i++){
-    const c = centerObjects[i];
-    if (c.spec.side !== side) continue;
-    const dSq = patchPos.distanceToSquared(c.group.position);
-    if (dSq < bestCenterDistSq){
-      bestCenterDistSq = dSq;
-      nearestCenter = c;
-    }
-  }
-
-  let nearestBuildingPos = null;
-  let bestBuildingDistSq = Infinity;
-  for (let i = 0; i < buildings.length; i++){
-    const b = buildings[i];
-    if (getBuildingSide(b) !== side) continue;
-    const bPos = new THREE.Vector3(b.x, b.y, b.z);
-    const dSq = patchPos.distanceToSquared(bPos);
-    if (dSq < bestBuildingDistSq){
-      bestBuildingDistSq = dSq;
-      nearestBuildingPos = bPos;
-    }
-  }
-
-  let attractionTarget = nearestCenter ? nearestCenter.group.position : null;
-  if (nearestBuildingPos && (!attractionTarget || bestBuildingDistSq < bestCenterDistSq)){
-    attractionTarget = nearestBuildingPos;
-  }
-
-  const maxOffsetRad = (patchSize * 0.35) / PLANET_RADIUS;
-  const treeDirs = [];
-
-  if (attractionTarget){
-    const up = dir.clone().multiplyScalar(side);
-    const targetDir = attractionTarget.clone().normalize();
-    const toTarget = targetDir.clone().sub(dir.clone().multiplyScalar(targetDir.dot(dir)));
-    if (toTarget.lengthSq() > 1e-6){
-      toTarget.normalize();
-      const perp = new THREE.Vector3().crossVectors(up, toTarget).normalize();
-
-      const dirToCenter = dir.clone().addScaledVector(toTarget, maxOffsetRad).normalize();
-      treeDirs.push([Number(dirToCenter.x.toFixed(6)), Number(dirToCenter.y.toFixed(6)), Number(dirToCenter.z.toFixed(6))]);
-
-      const dirSecond = dir.clone()
-        .addScaledVector(toTarget, maxOffsetRad * 0.7)
-        .addScaledVector(perp, maxOffsetRad * 0.45)
-        .normalize();
-      treeDirs.push([Number(dirSecond.x.toFixed(6)), Number(dirSecond.y.toFixed(6)), Number(dirSecond.z.toFixed(6))]);
-    }
-  }
-
-  if (treeDirs.length === 0){
-    treeDirs.push([Number(dir.x.toFixed(6)), Number(dir.y.toFixed(6)), Number(dir.z.toFixed(6))]);
-  }
+  const treeDirs = [[Number(dir.x.toFixed(6)), Number(dir.y.toFixed(6)), Number(dir.z.toFixed(6))]];
 
   const newPlant = {
     id: 'p_' + Date.now() + '_' + Math.random().toString(16).slice(2, 6),
