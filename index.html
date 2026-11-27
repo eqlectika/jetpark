@@ -691,7 +691,10 @@ scene.background = new THREE.Color(0x0a0a12);
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 24000);
 
 const player = new THREE.Group();
-player.position.set(0, 0, 0);
+const outDir = new THREE.Vector3(0.7071, 0.7071, 0).normalize();
+const upInward = outDir.clone().negate();
+player.position.copy(outDir).multiplyScalar(PLANET_RADIUS - 40);
+player.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), upInward);
 scene.add(player);
 camera.quaternion.setFromEuler(new THREE.Euler(0, 0, 0, 'YXZ'));
 player.add(camera);
@@ -1386,7 +1389,7 @@ const BROKER_URL = 'wss://test.mosquitto.org:8081/mqtt';
 const TOPIC = 'outside_in_planet/megacity/v1';
 let mqttClient = null;
 const remotePeers = new Map();
-let lastPublishedPos = { x: 0, y: 0, z: 0 };
+let lastPublishedPos = { x: player.position.x, y: player.position.y, z: player.position.z };
 const seenMsgKeys = new Map();
 let lastStatePublishMs = 0;
 
@@ -1731,7 +1734,7 @@ function clearLongPressTimer(){
   }
 }
 
-function findPeerInCone(maxRange = 120, minCosAngle = 0.86){
+function findPeerInCone(maxRange = 300, minCosAngle = 0.65){
   camera.updateMatrixWorld();
   const origin = camera.getWorldPosition(_tmpVec4);
   const forward = _tmpVec3.set(0, 0, -1).applyQuaternion(camera.getWorldQuaternion(_tmpQuat1)).normalize();
@@ -1757,10 +1760,60 @@ function findPeerInCone(maxRange = 120, minCosAngle = 0.86){
   return bestId;
 }
 
+let aimedRingIndex = -1;
+
+function findRingInCone(maxRange = 450, minCosAngle = 0.88, nowMs = Date.now()){
+  camera.updateMatrixWorld();
+  const origin = camera.getWorldPosition(_tmpVec4);
+  const forward = _tmpVec3.set(0, 0, -1).applyQuaternion(camera.getWorldQuaternion(_tmpQuat1)).normalize();
+
+  let bestIdx = -1;
+  let bestScore = Infinity;
+
+  for (let i = 0; i < routeRings.length; i++){
+    const ring = routeRings[i];
+    if (nowMs < ring.cooldownUntil) continue;
+
+    _tmpVec1.copy(ring.mesh.position).sub(origin);
+    const dist = _tmpVec1.length();
+    if (dist < 0.001 || dist > maxRange) continue;
+
+    _tmpVec1.divideScalar(dist);
+    const cosAngle = forward.dot(_tmpVec1);
+    if (cosAngle < minCosAngle) continue;
+
+    const score = dist + (1 - cosAngle) * 250;
+    if (score < bestScore){
+      bestScore = score;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+  
+function triggerRingCaptureByIndex(idx, nowMs = Date.now()){
+  if (idx < 0 || idx >= routeRings.length) return false;
+  const ring = routeRings[idx];
+  if (nowMs < ring.cooldownUntil) return false;
+
+  ring.cooldownUntil = nowMs + RING_COOLDOWN_MS;
+  ring.mat.opacity = RING_FADED_OPACITY;
+  ring.needsFadeUpdate = true;
+  savedRingCooldowns[idx] = ring.cooldownUntil;
+  store.set('ring_cooldowns', savedRingCooldowns);
+  recordTokenDelta(2, 'Route ring', false);
+  return true;
+}
 function startHackAction(){
   if (isHoldingHack) return;
-  const nearPeer = findPeerInCone(120, 0.86);
-  if (!nearPeer) return;
+  const nearPeer = findPeerInCone(300, 0.86);
+  if (!nearPeer){
+    const ringIdx = findRingInCone(450, 0.88, performance.now() + (Date.now() - performance.now()));
+    if (ringIdx !== -1){
+      triggerRingCaptureByIndex(ringIdx, Date.now());
+    }
+    return;
+  }
   targetPeerId = nearPeer;
   lastStealStep = 0;
   isHoldingHack = true;
@@ -2135,8 +2188,13 @@ function applyWireframeMode(){
 applyWireframeMode();
 
 function updateConeLockIndicator(){
-  const peerId = findPeerInCone(120, 0.86);
-  const lockedPos = (peerId && remotePeers.has(peerId)) ? remotePeers.get(peerId).mesh.position : null;
+  const nowMs = Date.now();
+  const peerId = findPeerInCone(300, 0.86);
+  const lockedPeerPos = (peerId && remotePeers.has(peerId)) ? remotePeers.get(peerId).mesh.position : null;
+
+  aimedRingIndex = lockedPeerPos ? -1 : findRingInCone(450, 0.88, nowMs);
+  const lockedRingPos = aimedRingIndex !== -1 ? routeRings[aimedRingIndex].mesh.position : null;
+  const lockedPos = lockedPeerPos || lockedRingPos;
 
   if (lockedPos && !isHoldingHack){
     attackBtn.classList.add('locked');
