@@ -299,7 +299,7 @@ canvas#statsChart:active{cursor:grabbing}
   -webkit-background-clip: text;
   color: transparent;
 }
-#wireToggleBtn.on{ color:#fbbf24; }
+
 #nameToggleBtn.off{ color:#94a3b8; }
 /* Statistics typography and layout */
 #statsModal,
@@ -362,7 +362,7 @@ canvas#statsChart:active{cursor:grabbing}
 <div class="top-left-hud">
   <span id="presenceBadge" class="presence-badge alone">Alone</span>
   <button id="helpBtn" class="top-btn">Help</button>
-  <button id="wireToggleBtn" class="top-btn" title="Toggle Wire / Solid rendering">Wire</button>
+
   <button id="nameToggleBtn" class="top-btn" title="Toggle player names">Name</button>
 </div>
 
@@ -671,7 +671,7 @@ const tokenBalanceEl = document.getElementById('tokenBalanceEl');
 const chatFeed = document.getElementById('chatFeed');
 const chatInput = document.getElementById('chatInput');
 const attackBtn = document.getElementById('attackBtn');
-const wireToggleBtn = document.getElementById('wireToggleBtn');
+
 const nameToggleBtn = document.getElementById('nameToggleBtn');
 const reticleWrapEl = document.getElementById('reticleWrap');
 const reticleMenu = document.getElementById('reticleMenu');
@@ -1329,7 +1329,7 @@ lockSquareMesh.visible = false;
 scene.add(lockSquareMesh);
 
 /* [PERF OPT] Shared materials for arches (huge win on draw-call reduction) */
-const sharedArchMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.55, metalness: 0.35 });
+const sharedArchMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.55, metalness: 0.35, wireframe: true });
 const sharedAccentMat = new THREE.LineBasicMaterial({ color: 0xffffff });
 const sharedEdgeMats = linePalette.map(c => new THREE.LineBasicMaterial({ color: c }));
 
@@ -1594,7 +1594,7 @@ function getSurfaceSupportRadius(dir, side, ignoreId = null){
 }
 
 /* [PERF OPT] Shared house material + cached EdgesGeometry templates */
-const sharedHouseMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 });
+const sharedHouseMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7, wireframe: true });
 const houseEdgeMatCache = new Map();
 function getHouseEdgeMaterial(color){
   if (!houseEdgeMatCache.has(color)){
@@ -1692,10 +1692,11 @@ const greenPatchMat = new THREE.MeshStandardMaterial({
   metalness: 0.05,
   transparent: true,
   opacity: 0.72,
-  side: THREE.DoubleSide
+  side: THREE.DoubleSide,
+  wireframe: true
 });
-const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.85 });
-const treeCrownMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.65 });
+const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.85, wireframe: true });
+const treeCrownMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.65, wireframe: true });
 
 function getUnevenSurfaceRadiusAtDir(dir, side, ignoreId = null){
   const nDir = dir.clone().normalize();
@@ -3232,46 +3233,24 @@ if (!peerEntry || player.position.distanceToSquared(peerEntry.mesh.position) > 2
 }
 
 /* =========================================================
-   WIRE / SOLID TOGGLE
+   WIRE / SOLID — навсегда включён wireframe
    ========================================================= */
-let wireframeMode = store.get('wire_mode', false);
-
-function collectWireframeTargets(){
-  const meshes = [];
+function applyWireframeMode(){
   scene.traverse(obj => {
     if (!obj.isMesh || !obj.material) return;
     const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-    const usable = mats.filter(m => m && 'wireframe' in m && !m.isShaderMaterial);
-    if (!usable.length) return;
-    if (usable.every(m => m.transparent && m.opacity < 0.05)) return;
-    meshes.push(obj);
-  });
-  return meshes;
-}
-
-function applyWireframeMode(enable){
-  wireframeMode = !!enable;
-  collectWireframeTargets().forEach(obj => {
-    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
     mats.forEach(m => {
       if (!m || !('wireframe' in m) || m.isShaderMaterial) return;
-      m.wireframe = wireframeMode;
+      m.wireframe = true;
       m.needsUpdate = true;
     });
   });
   scene.traverse(obj => {
-    if (obj.isLineSegments) obj.visible = !wireframeMode;
+    if (obj.isLineSegments) obj.visible = false;
   });
-  wireToggleBtn.textContent = wireframeMode ? 'Solid' : 'Wire';
-  wireToggleBtn.classList.toggle('on', wireframeMode);
-  store.set('wire_mode', wireframeMode);
 }
 
-wireToggleBtn.addEventListener('click', () => {
-  applyWireframeMode(!wireframeMode);
-});
-
-applyWireframeMode(wireframeMode);
+applyWireframeMode();
 function updateConeLockIndicator(){
   let lockedPos = null;
   if (selectedReticleMode === 'hack'){
