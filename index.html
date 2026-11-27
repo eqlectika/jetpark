@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-<head> 
+<head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <link rel="icon" type="image/png" sizes="512x512" href="jetpark.png">
@@ -592,6 +592,7 @@ if (!tokenSeries.length) tokenSeries = [{ t: Date.now(), val: tokens }];
 let expenseHistory = Array.isArray(store.get('expense_history', null)) ? store.get('expense_history', []) : [];
 let selectedExpenseIds = new Set();
 let buildings = Array.isArray(store.get('buildings', null)) ? store.get('buildings', []) : [];
+let plants = Array.isArray(store.get('plants', null)) ? store.get('plants', []) : [];
 let selectedTimeframe = store.get('chart_timeframe', 'day');
 if (!['day', 'week', 'month', 'all'].includes(selectedTimeframe)) selectedTimeframe = 'day';
 function normalizeExpenseHistory(list){
@@ -1683,6 +1684,8 @@ function upsertBuildingMesh(b){
 buildings.forEach(upsertBuildingMesh);
 const greeningGroup = new THREE.Group();
 scene.add(greeningGroup);
+const plantMeshes = new Map();
+const plantById = new Map();
 const greenPatchMat = new THREE.MeshStandardMaterial({
   color: 0x22c55e,
   roughness: 0.75,
@@ -1758,7 +1761,7 @@ function buildUnevenProjectedSquareGeometry(centerDir, side, patchSize, segs = 1
   return geo;
 }
 
-function addTreeOnUnevenSurface(treeDir, side){
+function addTreeOnUnevenSurface(treeDir, side, targetContainer = greeningGroup){
   const nDir = treeDir.clone().normalize();
   const surfR = getUnevenSurfaceRadiusAtDir(nDir, side);
   if (surfR === null) return false;
@@ -1779,9 +1782,40 @@ function addTreeOnUnevenSurface(treeDir, side){
   crown.position.y = 6.4;
 
   treeGroup.add(trunk, crown);
-  greeningGroup.add(treeGroup);
+  targetContainer.add(treeGroup);
   return true;
 }
+
+function upsertPlantMesh(p){
+  if (!p || !p.id || plantById.has(p.id)) return;
+  plantById.set(p.id, p);
+  if (!plants.some(item => item.id === p.id)){
+    plants.push(p);
+  }
+
+  const side = p.side === -1 ? -1 : 1;
+  const dir = new THREE.Vector3(p.dx, p.dy, p.dz).normalize();
+  if (sampleTerrainAtDir(dir).isPassThrough) return;
+
+  const container = new THREE.Group();
+  const patchSize = 20;
+  const patchGeo = buildUnevenProjectedSquareGeometry(dir, side, patchSize, 16);
+  const patchMesh = new THREE.Mesh(patchGeo, greenPatchMat);
+  container.add(patchMesh);
+
+  if (Array.isArray(p.trees) && p.trees.length){
+    p.trees.forEach(t => {
+      addTreeOnUnevenSurface(new THREE.Vector3(t[0], t[1], t[2]), side, container);
+    });
+  } else {
+    addTreeOnUnevenSurface(dir, side, container);
+  }
+
+  greeningGroup.add(container);
+  plantMeshes.set(p.id, container);
+}
+
+plants.forEach(upsertPlantMesh);
 
 function createGreenPatchAndTree(aimPoint){
   const pLen = player.position.length();
@@ -1794,10 +1828,6 @@ function createGreenPatchAndTree(aimPoint){
   }
 
   const patchSize = 20;
-  const patchGeo = buildUnevenProjectedSquareGeometry(dir, side, patchSize, 16);
-  const patchMesh = new THREE.Mesh(patchGeo, greenPatchMat);
-  greeningGroup.add(patchMesh);
-
   const centerSurfR = getUnevenSurfaceRadiusAtDir(dir, side);
   const patchPos = dir.clone().multiplyScalar(centerSurfR !== null ? centerSurfR : PLANET_RADIUS);
 
@@ -1832,7 +1862,7 @@ function createGreenPatchAndTree(aimPoint){
   }
 
   const maxOffsetRad = (patchSize * 0.35) / PLANET_RADIUS;
-  let plantedCount = 0;
+  const treeDirs = [];
 
   if (attractionTarget){
     const up = dir.clone().multiplyScalar(side);
@@ -1843,20 +1873,35 @@ function createGreenPatchAndTree(aimPoint){
       const perp = new THREE.Vector3().crossVectors(up, toTarget).normalize();
 
       const dirToCenter = dir.clone().addScaledVector(toTarget, maxOffsetRad).normalize();
-      if (addTreeOnUnevenSurface(dirToCenter, side)) plantedCount++;
+      treeDirs.push([Number(dirToCenter.x.toFixed(6)), Number(dirToCenter.y.toFixed(6)), Number(dirToCenter.z.toFixed(6))]);
 
       const dirSecond = dir.clone()
         .addScaledVector(toTarget, maxOffsetRad * 0.7)
         .addScaledVector(perp, maxOffsetRad * 0.45)
         .normalize();
-      if (addTreeOnUnevenSurface(dirSecond, side)) plantedCount++;
+      treeDirs.push([Number(dirSecond.x.toFixed(6)), Number(dirSecond.y.toFixed(6)), Number(dirSecond.z.toFixed(6))]);
     }
   }
 
-  if (plantedCount === 0){
-    addTreeOnUnevenSurface(dir, side);
+  if (treeDirs.length === 0){
+    treeDirs.push([Number(dir.x.toFixed(6)), Number(dir.y.toFixed(6)), Number(dir.z.toFixed(6))]);
   }
+
+  const newPlant = {
+    id: 'p_' + Date.now() + '_' + Math.random().toString(16).slice(2, 6),
+    owner: myPeerId,
+    dx: Number(dir.x.toFixed(6)),
+    dy: Number(dir.y.toFixed(6)),
+    dz: Number(dir.z.toFixed(6)),
+    side,
+    trees: treeDirs
+  };
+
+  upsertPlantMesh(newPlant);
+  store.set('plants', plants);
+  publishMqtt({ type: 'PLANT_PLANTED', plant: newPlant });
 }
+
 function doesOverlapExistingBuilding(candidatePos, candidateRadius, ignoreId = null){
   for (const b of buildings){
     if (ignoreId && b.id === ignoreId) continue;
@@ -2194,18 +2239,24 @@ function publishCurrentState(force = false){
   lastStatePublishMs = now;
 }
 
-function publishMqtt(payload){
-  if (mqttClient && mqttClient.connected){
-    mqttClient.publish(
-      TOPIC,
-      JSON.stringify({ ...payload, sender: myPeerId, sid: clientId, ts: Date.now() }),
-      { qos: 0 }
-    );
-  }
+function broadcastLocalCreations(){
+  const queue = [];
+  buildings.forEach((b) => {
+    queue.push({ type: 'BUILDING_BUILT', building: b });
+  });
+  plants.forEach((p) => {
+    queue.push({ type: 'PLANT_PLANTED', plant: p });
+  });
+  queue.forEach((msg, index) => {
+    setTimeout(() => {
+      publishMqtt(msg);
+    }, index * 35);
+  });
 }
 
 function isDuplicateMqttMessage(data){
-  const key = `${data.sid || ''}|${data.sender || ''}|${data.type || ''}|${data.ts || 0}`;
+  const objId = (data.building && data.building.id) || (data.plant && data.plant.id) || data.buildingId || '';
+  const key = `${data.sid || ''}|${data.sender || ''}|${data.type || ''}|${objId}|${data.ts || 0}`;
   const now = Date.now();
   for (const [k, exp] of seenMsgKeys.entries()){
     if (exp < now) seenMsgKeys.delete(k);
@@ -2233,6 +2284,7 @@ function connectMqttBroker(){
     mqttClient.on('connect', () => {
       mqttClient.subscribe(TOPIC, { qos: 0 });
       publishCurrentState(true);
+      broadcastLocalCreations();
       publishMqtt({ type: 'SYNC_REQUEST' });
     });
 
@@ -2251,11 +2303,10 @@ function connectMqttBroker(){
         updatePresenceUI();
       } else if (data.type === 'SYNC_REQUEST'){
         publishCurrentState(true);
-        buildings.forEach((b) => {
-          if (b.owner === myPeerId){
-            publishMqtt({ type: 'BUILDING_BUILT', building: b });
-          }
-        });
+        broadcastLocalCreations();
+      } else if (data.type === 'PLANT_PLANTED' && data.plant){
+        upsertPlantMesh(data.plant);
+        store.set('plants', plants);
       } else if (data.type === 'CHAT' && typeof data.text === 'string'){
         appendChatLine(data.sender || 'Peer', data.text);
       } else if (data.type === 'TRANSFER' && data.to === myPeerId){
