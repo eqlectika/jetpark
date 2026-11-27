@@ -2273,7 +2273,17 @@ function isDuplicateMqttMessage(data){
   seenMsgKeys.set(key, now + 5000);
   return false;
 }
-
+function publishMqtt(payload){
+  if (!mqttClient || !mqttClient.connected) return;
+  const msg = Object.assign({
+    sid: clientId,
+    sender: myPeerId,
+    ts: Date.now()
+  }, payload);
+  try{
+    mqttClient.publish(TOPIC, JSON.stringify(msg), { qos: 0 });
+  }catch{}
+}
 function connectMqttBroker(){
   if (mqttClient){
     try{ mqttClient.removeAllListeners(); mqttClient.end(true); }catch{}
