@@ -2296,11 +2296,12 @@ function animate(){
   }
 
   const speed = velocity.length();
-  if (speed > 0.05){
+  const minSpeedForLook = inWater ? 0.01 : 0.05;
+  if (speed > minSpeedForLook){
     _tmpQuat2.copy(player.quaternion).invert();
     _camLookDir.copy(velocity).divideScalar(speed).applyQuaternion(_tmpQuat2).normalize();
-    const blendFactor = Math.min(0.65, speed * 0.4);
-    _camLookDir.lerp(_camForwardBase, 1 - blendFactor * 0.65).normalize();
+    const lookWeight = inWater ? Math.min(0.85, speed * 1.4) : Math.min(0.65, speed * 0.4) * 0.65;
+    _camLookDir.lerp(_camForwardBase, 1 - lookWeight).normalize();
   } else {
     _camLookDir.copy(_camForwardBase);
   }
