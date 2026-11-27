@@ -2079,11 +2079,7 @@ const backgroundPlanets = [];
    MQTT MULTIPLAYER
    ========================================================= */
 
-const BROKER_URLS = [
-  'wss://broker.emqx.io:8084/mqtt',
-  'wss://test.mosquitto.org:8081/mqtt'
-];
-let brokerIndex = 0;
+const BROKER_URL = 'wss://test.mosquitto.org:8081/mqtt';
 const TOPIC = 'outside_in_planet/megacity/v1';
 let mqttClient = null;
 const remotePeers = new Map();
@@ -2207,7 +2203,7 @@ function updatePeerLabelsScreenPosition(){
 function updatePresenceUI(){
   const now = Date.now();
   for (const [id, entry] of remotePeers.entries()){
-    if (now - entry.lastSeen > 12000){
+    if (now - entry.lastSeen > 25000){
       scene.remove(entry.mesh);
       if (entry.tagEl && entry.tagEl.parentNode) entry.tagEl.parentNode.removeChild(entry.tagEl);
       remotePeers.delete(id);
@@ -2290,10 +2286,8 @@ function connectMqttBroker(){
     mqttClient = null;
   }
 
-  const url = BROKER_URLS[brokerIndex % BROKER_URLS.length];
-
-  try{
-    mqttClient = mqtt.connect(url, {
+try{
+    mqttClient = mqtt.connect(BROKER_URL, {
       clientId,
       reconnectPeriod: 3000,
       connectTimeout: 5000,
@@ -2314,9 +2308,7 @@ function connectMqttBroker(){
     });
 
     mqttClient.on('error', () => {
-      brokerIndex++;
       updatePresenceUI();
-      setTimeout(connectMqttBroker, 1500);
     });
 
     mqttClient.on('message', (_, raw) => {
@@ -2400,9 +2392,15 @@ function appendChatLine(sender, text){
 connectMqttBroker();
 
 
+let lastSyncRequestMs = 0;
 setInterval(() => {
   publishCurrentState(false);
   updatePresenceUI();
+  const now = Date.now();
+  if (mqttClient && mqttClient.connected && (now - lastSyncRequestMs) > 6000){
+    lastSyncRequestMs = now;
+    publishMqtt({ type: 'SYNC_REQUEST' });
+  }
 }, 1500);
 
 
