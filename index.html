@@ -2079,7 +2079,11 @@ const backgroundPlanets = [];
    MQTT MULTIPLAYER
    ========================================================= */
 
-const BROKER_URL = 'wss://broker.emqx.io:8084/mqtt';
+const BROKER_URLS = [
+  'wss://broker.emqx.io:8084/mqtt',
+  'wss://test.mosquitto.org:8081/mqtt'
+];
+let brokerIndex = 0;
 const TOPIC = 'outside_in_planet/megacity/v1';
 let mqttClient = null;
 const remotePeers = new Map();
@@ -2132,15 +2136,16 @@ const glassShell = new THREE.Mesh(
   return { group, tagEl };
 }
 
-function getOrCreateRemotePeer(id){
+function getOrCreateRemotePeer(id, label = id){
   if (remotePeers.has(id)){
     const existing = remotePeers.get(id);
-    if (existing.tagEl.textContent !== id) existing.tagEl.textContent = id;
+    existing.label = label;
+    if (existing.tagEl.textContent !== label) existing.tagEl.textContent = label;
     return existing;
   }
-  const { group, tagEl } = createPeerSubjectGroup(id);
+  const { group, tagEl } = createPeerSubjectGroup(label);
   scene.add(group);
-  const entry = { mesh: group, tagEl, lastSeen: Date.now() };
+  const entry = { mesh: group, tagEl, label, lastSeen: Date.now() };
   remotePeers.set(id, entry);
   return entry;
 }
@@ -2208,7 +2213,10 @@ function updatePresenceUI(){
       remotePeers.delete(id);
     }
   }
-  if (remotePeers.size > 0){
+  if (!mqttClient || !mqttClient.connected){
+    presenceBadge.textContent = 'Offline';
+    presenceBadge.className = 'presence-badge alone';
+  } else if (remotePeers.size > 0){
     presenceBadge.textContent = `Else (${remotePeers.size})`;
     presenceBadge.className = 'presence-badge else';
   } else {
@@ -2272,32 +2280,45 @@ function connectMqttBroker(){
     mqttClient = null;
   }
 
+  const url = BROKER_URLS[brokerIndex % BROKER_URLS.length];
+
   try{
-    mqttClient = mqtt.connect(BROKER_URL, {
+    mqttClient = mqtt.connect(url, {
       clientId,
-      reconnectPeriod: 2500,
-      connectTimeout: 4000,
+      reconnectPeriod: 3000,
+      connectTimeout: 5000,
       keepalive: 45,
       clean: true
     });
 
     mqttClient.on('connect', () => {
       mqttClient.subscribe(TOPIC, { qos: 0 });
+      updatePresenceUI();
       publishCurrentState(true);
-      broadcastLocalCreations();
+      setTimeout(() => broadcastLocalCreations(), 300);
       publishMqtt({ type: 'SYNC_REQUEST' });
     });
 
-    mqttClient.on('error', () => {});
+    mqttClient.on('offline', () => {
+      updatePresenceUI();
+    });
+
+    mqttClient.on('error', () => {
+      brokerIndex++;
+      updatePresenceUI();
+      setTimeout(connectMqttBroker, 1500);
+    });
 
     mqttClient.on('message', (_, raw) => {
       let data;
       try{ data = JSON.parse(raw.toString()); }catch{ return; }
-      if (!data || data.sid === clientId || (data.sender && data.sender === myPeerId)) return;
+      if (!data || data.sid === clientId) return;
       if (isDuplicateMqttMessage(data)) return;
 
       if (data.type === 'STATE' && Array.isArray(data.pos) && data.pos.length === 3){
-        const entry = getOrCreateRemotePeer(data.sender || 'Peer');
+        const peerKey = data.sid || data.sender || 'Peer';
+        const peerLabel = data.sender || 'Peer';
+        const entry = getOrCreateRemotePeer(peerKey, peerLabel);
         entry.mesh.position.set(data.pos[0], data.pos[1], data.pos[2]);
         entry.lastSeen = Date.now();
         updatePresenceUI();
@@ -2311,7 +2332,7 @@ function connectMqttBroker(){
         appendChatLine(data.sender || 'Peer', data.text);
       } else if (data.type === 'TRANSFER' && data.to === myPeerId){
         recordTokenDelta(data.amount, `Transfer from ${data.sender}`, false);
-      } else if (data.type === 'PEER_HACKED' && data.target === myPeerId){
+      } else if (data.type === 'PEER_HACKED' && (data.targetSid === clientId || data.target === myPeerId)){
         const stolen = Math.min(tokens, Number(data.amount || 1));
         if (stolen > 0){
           recordTokenDelta(-stolen, `Hacked by ${data.attacker || data.sender || 'peer'}`, true);
@@ -2596,7 +2617,7 @@ function findBestTargetInCone(candidates, maxRange = 120, minCosAngle = 0.86){
 function findPeerInCone(maxRange = 120, minCosAngle = 0.86){
   const list = [];
   for (const [pid, entry] of remotePeers.entries()){
-    list.push({ id: pid, pos: entry.mesh.position });
+    list.push({ id: pid, label: entry.label || pid, pos: entry.mesh.position });
   }
   const hit = findBestTargetInCone(list, maxRange, minCosAngle);
   return hit ? hit.id : null;
@@ -3061,20 +3082,24 @@ document.getElementById('sendTokensBtn').addEventListener('click', () => {
 function refreshRecipientSelect(){
   const prevVal = recipientSelect.value;
   recipientSelect.innerHTML = '';
-  const peerKeys = Array.from(remotePeers.keys()).filter(k => k !== myPeerId);
-  if (!peerKeys.length){
+  const peerNames = Array.from(new Set(
+    Array.from(remotePeers.values())
+      .map(e => e.label)
+      .filter(name => name && name !== myPeerId)
+  ));
+  if (!peerNames.length){
     const opt = document.createElement('option');
     opt.value = '';
     opt.textContent = 'No online peers';
     recipientSelect.appendChild(opt);
   } else {
-    peerKeys.forEach(k => {
+    peerNames.forEach(name => {
       const opt = document.createElement('option');
-      opt.value = k;
-      opt.textContent = k;
+      opt.value = name;
+      opt.textContent = name;
       recipientSelect.appendChild(opt);
     });
-    if (prevVal && peerKeys.includes(prevVal)){
+    if (prevVal && peerNames.includes(prevVal)){
       recipientSelect.value = prevVal;
     }
   }
@@ -3191,8 +3216,9 @@ if (!peerEntry || player.position.distanceToSquared(peerEntry.mesh.position) > 2
     const stealStep = Math.floor(elapsed / 850);
     if (stealStep > lastDrainStep){
       lastDrainStep = stealStep;
-      recordTokenDelta(1, `Mid-flight hack ${targetPeerId}`, false);
-      publishMqtt({ type: 'PEER_HACKED', target: targetPeerId, attacker: myPeerId, amount: 1 });
+      const targetName = peerEntry.label || targetPeerId;
+      recordTokenDelta(1, `Mid-flight hack ${targetName}`, false);
+      publishMqtt({ type: 'PEER_HACKED', target: targetName, targetSid: targetPeerId, attacker: myPeerId, amount: 1 });
     }
   }
 }
