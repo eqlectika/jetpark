@@ -9,7 +9,7 @@
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="1280">
 <link rel="manifest" href="manifest.json">
-<title>Outside-in | Jetpack Mint & Build</title>
+<title>Outside-in | Jetpack Mint &amp; Hack</title>
 <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
 <style>
 :root{
@@ -82,24 +82,12 @@ canvas{
   letter-spacing:.5px;
   line-height:1.25;
   text-transform:uppercase;
-  color:#e2e8f0;
+  color:#7dd3fc;
   background:rgba(10,14,26,.78);
-  border:1px solid rgba(148,163,184,.28);
+  border:1px solid rgba(56,189,248,.55);
   white-space:nowrap;
   pointer-events:none;
   user-select:none;
-}
-#reticleModeTag.mode-attack{
-  color:#fda4af;
-  border-color:rgba(251,113,133,.55);
-}
-#reticleModeTag.mode-plant{
-  color:#86efac;
-  border-color:rgba(74,222,128,.55);
-}
-#reticleModeTag.mode-hack{
-  color:#7dd3fc;
-  border-color:rgba(56,189,248,.55);
 }
 #attackBtn{
   width:56px;height:56px;
@@ -113,27 +101,8 @@ canvas{
   filter:drop-shadow(0 0 6px rgba(56,189,248,.85));
 }
 #attackBtn.active{
-  color:#fb7185;
-  filter:drop-shadow(0 0 6px rgba(251,113,133,.75));
-}
-#reticleMenu{
-  position:fixed;z-index:52;display:none;flex-direction:column;gap:4px;
-  background:rgba(10,14,26,.94);border:1px solid rgba(148,163,184,.32);
-  border-radius:8px;padding:6px;min-width:148px;max-width:186px;
-}
-#reticleMenu.open{display:flex}
-.rm-item{
-  background:rgba(30,41,59,.8);border:1px solid rgba(148,163,184,.22);
-  color:#f8fafc;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;
-  text-align:left;cursor:pointer;
-}
-@media (hover:hover){
-  .rm-item:hover{background:#1d4ed8;border-color:#93c5fd}
-}
-.rm-item.selected{background:#2563eb;border-color:#60a5fa}
-.rm-hint{
-  margin-top:2px;padding-top:4px;border-top:1px solid rgba(148,163,184,.18);
-  font-size:10.5px;line-height:1.3;color:#94a3b8;
+  color:#7dd3fc;
+  filter:drop-shadow(0 0 6px rgba(56,189,248,.75));
 }
 
 .bottom-bar{
@@ -217,13 +186,11 @@ canvas{
   color:#e2e8f0;
   cursor:pointer;
 }
-
 .close-modal:hover{
   background:#1e293b;
   border-color:#64748b;
   color:#fff;
 }
-
 
 .timeframe-bar{
   display:flex;gap:6px;margin-bottom:8px;flex-shrink:0;
@@ -251,14 +218,13 @@ canvas#statsChart:active{cursor:grabbing}
 .act-btn{
   background:#2563eb;border:none;color:#fff;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;
 }
-.act-btn.withdraw{background:#059669}
 .act-btn.secondary{background:#334155}
 .act-btn.danger{background:#dc2626}
 .act-btn:disabled{opacity:.45;cursor:default}
 .hist-list{
-  min-height:96px;max-height:200px;overflow-y:auto;
+  flex:1;min-height:120px;max-height:320px;overflow-y:auto;
   background:#070a14;border:1px solid #1e293b;border-radius:8px;
-  padding:4px 8px;margin-top:6px;margin-bottom:12px;flex-shrink:0;
+  padding:4px 8px;margin-top:6px;margin-bottom:12px;
 }
 .hist-item{
   display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #131c31;font-size:12px;color:#e2e8f0;
@@ -267,15 +233,6 @@ canvas#statsChart:active{cursor:grabbing}
 .hist-item.sel{background:rgba(220,38,38,.16)}
 .hist-amount.in{color:#4ade80;font-weight:600}
 .hist-amount.out{color:#f87171;font-weight:600}
-.buildings-box{
-  flex:1;min-height:120px;overflow-y:auto;background:#070a14;border:1px solid #1e293b;
-  border-radius:8px;padding:8px;font-size:12px;color:#cbd5e1;
-}
-.b-row{
-  display:flex;justify-content:space-between;align-items:center;gap:8px;
-  padding:5px 0;border-bottom:1px solid #111827;
-}
-.b-row:last-child{border-bottom:none}
 .help-text p{margin-bottom:8px;font-size:13px;line-height:1.45;color:#cbd5e1}
 .help-footer-logo{
   margin-top:16px;padding-top:12px;border-top:1px solid #1e293b;
@@ -300,8 +257,6 @@ canvas#statsChart:active{cursor:grabbing}
   color: transparent;
 }
 
-#nameToggleBtn.off{ color:#94a3b8; }
-/* Statistics typography and layout */
 #statsModal,
 #statsModal * {
   box-sizing: border-box;
@@ -310,8 +265,6 @@ canvas#statsChart:active{cursor:grabbing}
 }
 
 #statsModal .hist-item,
-#statsModal .buildings-box,
-#statsModal .b-row,
 #statsModal .transfer-row input,
 #statsModal .transfer-row select,
 #statsModal .section-label {
@@ -332,14 +285,6 @@ canvas#statsChart:active{cursor:grabbing}
   gap: 8px;
 }
 
-#statsModal .buildings-box {
-  padding: 8px;
-}
-
-#statsModal .b-row {
-  padding: 5px 4px;
-}
-
 #statsModal .transfer-row input,
 #statsModal .transfer-row select {
   padding: 6px 8px;
@@ -347,8 +292,7 @@ canvas#statsChart:active{cursor:grabbing}
 
 #statsModal canvas#statsChart,
 #statsModal .transfer-row,
-#statsModal .hist-list,
-#statsModal .buildings-box {
+#statsModal .hist-list {
   width: 100%;
   margin-left: 0;
   margin-right: 0;
@@ -362,8 +306,6 @@ canvas#statsChart:active{cursor:grabbing}
 <div class="top-left-hud">
   <span id="presenceBadge" class="presence-badge alone">Alone</span>
   <button id="helpBtn" class="top-btn">Help</button>
-
-  <button id="nameToggleBtn" class="top-btn" title="Toggle player names">Name</button>
 </div>
 
 <div class="top-right-hud">
@@ -374,8 +316,8 @@ canvas#statsChart:active{cursor:grabbing}
 <div id="controlArea"></div>
 
 <div id="reticleWrap">
-  <div id="reticleModeTag" aria-hidden="true">BUILD</div>
-  <div id="attackBtn" title="Tap to open menu. Long-press the crosshair to activate the mode.">
+  <div id="reticleModeTag" aria-hidden="true">HACK</div>
+  <div id="attackBtn" title="Drag the crosshair to aim. Long-press (or press F) to hack.">
     <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
       <line x1="18" y1="3" x2="18" y2="13" stroke="currentColor" stroke-width="2"/>
       <line x1="18" y1="23" x2="18" y2="33" stroke="currentColor" stroke-width="2"/>
@@ -384,14 +326,6 @@ canvas#statsChart:active{cursor:grabbing}
       <circle cx="18" cy="18" r="2.2" fill="currentColor"/>
     </svg>
   </div>
-</div>
-
-<div id="reticleMenu">
-  <button class="rm-item selected" data-mode="build">Build</button>
-  <button class="rm-item" data-mode="plant">Plant</button>
-  <button class="rm-item" data-mode="attack">Attack</button>
-  <button class="rm-item" data-mode="hack">Hack</button>
-  <div class="rm-hint">Long-press the crosshair to activate the mode</div>
 </div>
 
 <div id="peerLabelsLayer"></div>
@@ -408,13 +342,12 @@ canvas#statsChart:active{cursor:grabbing}
   <div class="modal-card">
     <div class="modal-head">
       <h2>Stats</h2>
-<button class="close-modal" id="closeStatsBtn" aria-label="Close">
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <line x1="3.5" y1="3.5" x2="12.5" y2="12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    <line x1="12.5" y1="3.5" x2="3.5" y2="12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-  </svg>
-</button>
-
+      <button class="close-modal" id="closeStatsBtn" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <line x1="3.5" y1="3.5" x2="12.5" y2="12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="12.5" y1="3.5" x2="3.5" y2="12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
     <div class="timeframe-bar" id="timeframeBar">
       <button class="tf-btn active" data-tf="day">Day</button>
@@ -441,19 +374,13 @@ canvas#statsChart:active{cursor:grabbing}
       </div>
     </div>
     <div class="hist-list" id="expenseHistoryList"></div>
-
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
-      <strong style="font-size:12px;color:#94a3b8">Built Houses (<span id="builtCountEl">0</span>)</strong>
-      <button class="act-btn withdraw" id="withdrawAllBtn" disabled>Withdraw All</button>
-    </div>
-    <div class="buildings-box" id="builtHousesList"></div>
   </div>
 </div>
 
 <div class="modal-overlay" id="helpModal">
   <div class="modal-card help-text">
-        <div class="modal-head">
-      <h2>Mint &amp; Build</h2>
+    <div class="modal-head">
+      <h2>Mint &amp; Hack</h2>
       <button class="close-modal" id="closeHelpBtn" aria-label="Close">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <line x1="3.5" y1="3.5" x2="12.5" y2="12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -464,10 +391,9 @@ canvas#statsChart:active{cursor:grabbing}
 
     <p><strong>Touch Controls:</strong> Drag up or down on the left half of the screen for throttle; drag on the right half to tilt.</p>
     <p><strong>Desktop Controls:</strong> Use Arrow keys (<code>←</code> <code>↑</code> <code>↓</code> <code>→</code>) or hold left mouse button and drag to tilt; hold <code>Space</code> for forward thrust (double-tap <code>Space</code> for boost) or <code>B</code> for reverse thrust.</p>
-    <p><strong>Reticle &amp; Modes:</strong> Drag the crosshair to aim. <strong>Tap</strong> the crosshair to open or close the mode menu (<code>Build</code>, <code>Attack</code>, <code>Hack</code>), select a mode, and <strong>long-press</strong> the crosshair to activate it.</p>
+    <p><strong>Reticle &amp; Hack:</strong> Drag the crosshair to aim, and <strong>long-press</strong> the crosshair (or hold <code>F</code>) to hack nearby players mid-flight.</p>
     <p><strong>Free Flight &amp; Gravity:</strong> Fly in any direction indefinitely. Gravity is zero at the planet center and zero at the matching outer height.</p>
-    <p><strong>Rings & Buildings:</strong> Fly through the rings to collect tokens and build houses.</p>
-    <p><strong>Hack Houses &amp; Flyers:</strong> Hack stored tokens from other players' buildings or hack nearby players mid-flight.</p>
+    <p><strong>Rings &amp; Hacking:</strong> Fly through the rings to collect tokens and hack nearby players to extract tokens.</p>
     <div class="help-footer-logo">
       <a href="./match.html" target="_blank" rel="noopener noreferrer" title="Telegram">
         <img src="fleurdelis.png" alt="Fleur-de-lis">
@@ -530,12 +456,10 @@ const RING_ACTIVE_OPACITY = 0.9;
 const RING_FADED_OPACITY = 0.14;
 const LONG_PRESS_MS = 450;
 
-/* [PERF OPT] Pool of temporary objects for the animation loop */
 const _tmpVec1 = new THREE.Vector3();
 const _tmpVec2 = new THREE.Vector3();
 const _tmpVec3 = new THREE.Vector3();
 const _tmpVec4 = new THREE.Vector3();
-const _tmpVec5 = new THREE.Vector3();
 const _tmpQuat1 = new THREE.Quaternion();
 const _tmpQuat2 = new THREE.Quaternion();
 const _tmpEuler = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -591,29 +515,27 @@ let tokenSeries = Array.isArray(store.get('token_series', null)) ? store.get('to
 if (!tokenSeries.length) tokenSeries = [{ t: Date.now(), val: tokens }];
 let expenseHistory = Array.isArray(store.get('expense_history', null)) ? store.get('expense_history', []) : [];
 let selectedExpenseIds = new Set();
-let buildings = Array.isArray(store.get('buildings', null)) ? store.get('buildings', []) : [];
-let plants = Array.isArray(store.get('plants', null)) ? store.get('plants', []) : [];
 let selectedTimeframe = store.get('chart_timeframe', 'day');
 if (!['day', 'week', 'month', 'all'].includes(selectedTimeframe)) selectedTimeframe = 'day';
+
 function normalizeExpenseHistory(list){
   if (!Array.isArray(list)) return [];
   return list
     .filter((item) => {
       if (!item || typeof item !== 'object') return false;
       const amt = Number(item.amount);
-      if (!Number.isFinite(amt) || amt <= 0) return false;
-      const reasonStr = String(item.reason || '');
-      if (/^withdraw/i.test(reasonStr) && amt <= 0) return false;
-      return true;
+      return Number.isFinite(amt) && amt > 0;
     })
     .slice(0, 200);
 }
+
 function saveEconomy(){
   expenseHistory = normalizeExpenseHistory(expenseHistory);
   store.set('tokens', tokens);
   store.set('token_series', tokenSeries.slice(-300));
   store.set('expense_history', expenseHistory);
 }
+
 function recordTokenDelta(delta, reason, isExpense = false){
   const numDelta = Number(delta);
   if (!Number.isFinite(numDelta)) return;
@@ -622,8 +544,8 @@ function recordTokenDelta(delta, reason, isExpense = false){
   const actualDelta = Number((tokens - prevTokens).toFixed(2));
   tokenSeries.push({ t: Date.now(), val: tokens });
   const reasonLabel = reason || (actualDelta >= 0 ? 'Incoming' : 'Expense');
-  const isEmptyWithdraw = /^withdraw/i.test(String(reasonLabel)) && Math.abs(actualDelta) <= 0;
-  if (!isEmptyWithdraw && (actualDelta !== 0 || isExpense)){
+
+  if (actualDelta !== 0 || isExpense){
     const signedAmt = actualDelta !== 0 ? actualDelta : (isExpense ? -Math.abs(numDelta) : numDelta);
     const absAmt = Number(Math.abs(signedAmt).toFixed(2));
     if (absAmt > 0){
@@ -638,15 +560,15 @@ function recordTokenDelta(delta, reason, isExpense = false){
     }
   }
   saveEconomy();
-  
+
   tokenBalanceEl.textContent = Number.isInteger(tokens) ? tokens : tokens.toFixed(1);
   if (typeof statsModal !== 'undefined' && statsModal && statsModal.classList.contains('show')){
     drawChart();
     renderExpenseHistory();
-    renderBuiltHouses();
   }
 }
-function routeAuthorFee(amount, source, buildingId = null){
+
+function routeAuthorFee(amount, source){
   const numAmt = Number(amount);
   if (!Number.isFinite(numAmt) || numAmt <= 0) return;
   const rounded = Number(numAmt.toFixed(2));
@@ -658,25 +580,20 @@ function routeAuthorFee(amount, source, buildingId = null){
     to: AUTHOR_ID,
     amount: rounded,
     source,
-    buildingId,
     from: myPeerId
   });
 }
 
 const peerIdInput = document.getElementById('peerIdInput');
-  peerIdInput.value = myPeerId;
+peerIdInput.value = myPeerId;
 const presenceBadge = document.getElementById('presenceBadge');
 const tokenBalanceEl = document.getElementById('tokenBalanceEl');
-  tokenBalanceEl.textContent = Number.isInteger(tokens) ? tokens : tokens.toFixed(1);
+tokenBalanceEl.textContent = Number.isInteger(tokens) ? tokens : tokens.toFixed(1);
 const chatFeed = document.getElementById('chatFeed');
 const chatInput = document.getElementById('chatInput');
 const attackBtn = document.getElementById('attackBtn');
-
-const nameToggleBtn = document.getElementById('nameToggleBtn');
 const reticleWrapEl = document.getElementById('reticleWrap');
-const reticleMenu = document.getElementById('reticleMenu');
 const peerLabelsLayer = document.getElementById('peerLabelsLayer');
-
 const startButtonEl = document.getElementById('startButton');
 
 function syncFullscreenButtonVisibility(){
@@ -705,7 +622,6 @@ startButtonEl.addEventListener('click', () => {
   else if (document.documentElement.webkitRequestFullscreen) document.documentElement.webkitRequestFullscreen();
   if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
 });
-
 
 let currentThrottle = 0;
 let touchJoystick = { active: false, startX: 0, startY: 0, moveX: 0, moveY: 0 };
@@ -901,7 +817,6 @@ const passThroughAnchors = [
   new THREE.Vector3(0, 0.7071, 0.7071).normalize(),
   new THREE.Vector3(0, -0.7071, -0.7071).normalize()
 ];
-/* [PERF OPT] Precompute cos(windowRadiusRad) for O(1) dot-based window test */
 const PASS_WINDOW_COS = Math.cos(0.24);
 
 const _tmpCamPos = new THREE.Vector3();
@@ -1072,8 +987,6 @@ const planetShellMeshes = baseShellLayers.map((layer) => {
   return mesh;
 });
 
-const planetMesh = planetShellMeshes[0];
-
 const waterOuterRadius = PLANET_RADIUS + WATER_OUTER_OFFSET;
 const waterInnerRadius = Math.max(100, PLANET_RADIUS - WATER_INNER_OFFSET);
 
@@ -1087,20 +1000,7 @@ const waterInnerMesh = new THREE.Mesh(
 );
 planetShellGroup.add(waterOuterMesh, waterInnerMesh);
 
-function isInWaterLayer(pos){
-  const r = pos.length();
-  if (r < 0.001) return false;
-  /* [PERF OPT] Pass pos directly, no clone (sampleTerrainAtDir no longer clones) */
-  _tmpVec1.copy(pos).divideScalar(r);
-  const info = sampleTerrainAtDir(_tmpVec1);
-  if (!info.isPassThrough && r >= info.innerSolidR && r <= info.outerSolidR){
-    return false;
-  }
-  return r >= waterInnerRadius && r <= waterOuterRadius;
-}
-
 function sampleTerrainAtDir(dir){
-  /* [PERF OPT] No clone — assume input is normalized. Compute dot-based window test. */
   const nx = dir.x, ny = dir.y, nz = dir.z;
   const ridgeA = Math.sin(nx * 5.0 + ny * 3.0) * Math.cos(nz * 4.0 - nx * 2.0);
   const ridgeB = Math.sin(ny * 8.0 - nz * 6.0) * 0.5;
@@ -1136,6 +1036,17 @@ function sampleTerrainAtDir(dir){
   }
 
   return { isPassThrough, innerSolidR, outerSolidR };
+}
+
+function isInWaterLayer(pos){
+  const r = pos.length();
+  if (r < 0.001) return false;
+  _tmpVec1.copy(pos).divideScalar(r);
+  const info = sampleTerrainAtDir(_tmpVec1);
+  if (!info.isPassThrough && r >= info.innerSolidR && r <= info.outerSolidR){
+    return false;
+  }
+  return r >= waterInnerRadius && r <= waterOuterRadius;
 }
 
 function buildDisplacedShellGeometry(radius, segW, segH, useOuterSide){
@@ -1196,10 +1107,10 @@ solidTerrainMat.onBeforeCompile = (shader) => {
        float ridgeB = sin(n.y * 8.0 - n.z * 6.0) * 0.5;
        float landmass = ridgeA + ridgeB;
 
-float surface1R = 7800.0 + max(6.0, 18.0 + (landmass * 34.0) + (ridgeB * 14.0));
-float surface2R = max(10.0, 7800.0 - max(6.0, 18.0 - (-landmass * 32.0) - (ridgeA * 12.0)));
-float vol1 = max(0.0, surface1R - 7800.0);
-float vol2 = max(0.0, 7800.0 - surface2R);
+       float surface1R = 7800.0 + max(6.0, 18.0 + (landmass * 34.0) + (ridgeB * 14.0));
+       float surface2R = max(10.0, 7800.0 - max(6.0, 18.0 - (-landmass * 32.0) - (ridgeA * 12.0)));
+       float vol1 = max(0.0, surface1R - 7800.0);
+       float vol2 = max(0.0, 7800.0 - surface2R);
        bool s1Larger = vol1 >= vol2;
        bool isIntersectionOfSurfaces = abs(surface1R - surface2R) < 22.0;
        bool cutSmallerSide = isIntersectionOfSurfaces && (s1Larger ? (vol2 < vol1 * 0.95) : (vol1 < vol2 * 0.95));
@@ -1209,8 +1120,8 @@ float vol2 = max(0.0, 7800.0 - surface2R);
     .replace(
       '#include <dithering_fragment>',
       `float rPos = length(vCutWorldPos);
-float aboveMask = smoothstep(7812.0, 7816.0, rPos);
-float belowMask = 1.0 - smoothstep(7784.0, 7788.0, rPos);
+       float aboveMask = smoothstep(7812.0, 7816.0, rPos);
+       float belowMask = 1.0 - smoothstep(7784.0, 7788.0, rPos);
        float softGrain = 0.96 + 0.04 * sin(vCutWorldPos.x * 0.25) * cos(vCutWorldPos.z * 0.25);
        vec3 aboveLand = vec3(0.46, 0.39, 0.30) * softGrain;
        vec3 belowLand = vec3(0.05, 0.13, 0.24) * softGrain;
@@ -1229,7 +1140,6 @@ planetShellGroup.add(solidOuterMesh, solidInnerMesh);
 function resolveSolidTerrainCollision(pos, vel, clearance = 0.45){
   const r = pos.length();
   if (r < 0.001) return false;
-  /* [PERF OPT] Use pooled vector + fill directly */
   _tmpVec2.copy(pos).divideScalar(r);
   const info = sampleTerrainAtDir(_tmpVec2);
   if (info.isPassThrough) return false;
@@ -1265,7 +1175,6 @@ function guardCameraFocusAgainstTerrain(camWorldPos){
   }
 }
 
-const collidableObjects = [...planetShellMeshes, solidOuterMesh, solidInnerMesh];
 const linePalette = [0x38bdf8, 0xf472b6, 0xfbbf24, 0x4ade80, 0xc084fc, 0xfb7185];
 
 const sixDirections = [
@@ -1283,22 +1192,8 @@ const centerSpecs = [];
 sixDirections.forEach((_, dirIndex) => {
   const arch = archTypes[dirIndex % archTypes.length];
   const color = linePalette[dirIndex % linePalette.length];
-  centerSpecs.push({
-    id: `c_out_${dirIndex}`,
-    arch,
-    dirIndex,
-    side: 1,
-    color,
-    influenceRadius: 320
-  });
-  centerSpecs.push({
-    id: `c_in_${dirIndex}`,
-    arch,
-    dirIndex,
-    side: -1,
-    color,
-    influenceRadius: 320
-  });
+  centerSpecs.push({ id: `c_out_${dirIndex}`, arch, dirIndex, side: 1, color });
+  centerSpecs.push({ id: `c_in_${dirIndex}`, arch, dirIndex, side: -1, color });
 });
 
 const centerObjects = [];
@@ -1328,7 +1223,6 @@ const lockSquareMesh = new THREE.LineSegments(
 lockSquareMesh.visible = false;
 scene.add(lockSquareMesh);
 
-/* [PERF OPT] Shared materials for arches (huge win on draw-call reduction) */
 const sharedArchMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.55, metalness: 0.35, wireframe: true });
 const sharedAccentMat = new THREE.LineBasicMaterial({ color: 0xffffff });
 const sharedEdgeMats = linePalette.map(c => new THREE.LineBasicMaterial({ color: c }));
@@ -1385,102 +1279,24 @@ function addArchAccentToParent(parent, archType, yOffset, scale, colorHex, regis
   parent.add(holder);
 }
 
-function buildUniqueCenterGroup(spec){
-  const group = new THREE.Group();
-  addArchAccentToParent(group, spec.arch, 0, 8.5, spec.color, true);
-  return group;
-}
-
 centerSpecs.forEach((spec) => {
   const dir = sixDirections[spec.dirIndex].clone().normalize();
   const baseR = PLANET_RADIUS;
   const up = dir.clone().multiplyScalar(spec.side);
-  const group = buildUniqueCenterGroup(spec);
+  const group = new THREE.Group();
+  addArchAccentToParent(group, spec.arch, 0, 8.5, spec.color, true);
   group.position.copy(dir).multiplyScalar(baseR);
   group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
   scene.add(group);
-  centerObjects.push({
-    spec,
-    dir,
-    baseR,
-    up,
-    group,
-    cPos: dir.clone().multiplyScalar(baseR),
-    elevationBoost: 0,
-    growthScale: 1.0
-  });
+  centerObjects.push({ spec, dir, baseR, up, group });
 });
-
-function getNearestCenterSpec(pos){
-  const pDir = pos.length() > 0.001 ? pos.clone().normalize() : new THREE.Vector3(1, 0, 0);
-  let best = centerSpecs[0];
-  let bestDot = -Infinity;
-  for (const c of centerSpecs){
-    const d = pDir.dot(sixDirections[c.dirIndex]);
-    if (d > bestDot){
-      bestDot = d;
-      best = c;
-    }
-  }
-  return best;
-}
-
-let lastCentersUpdateMs = 0;
-function updateCentersInfluence(nowMs){
-  /* [PERF OPT] Slower throttle (was 90ms) */
-  if (nowMs - lastCentersUpdateMs < 300) return;
-  lastCentersUpdateMs = nowMs;
-
-  const totalBuildings = buildings.length;
-  for (let i = 0; i < centerObjects.length; i++){
-    const c = centerObjects[i];
-    let localCount = 0;
-    let score = 0;
-
-    for (let j = 0; j < totalBuildings; j++){
-      const b = buildings[j];
-      const bLenSq = b.x * b.x + b.y * b.y + b.z * b.z;
-      const bSide = b.side ?? (bLenSq >= PLANET_RADIUS * PLANET_RADIUS ? 1 : -1);
-      if (bSide !== c.spec.side) continue;
-      localCount++;
-      const dx = b.x - c.cPos.x;
-      const dy = b.y - c.cPos.y;
-      const dz = b.z - c.cPos.z;
-      /* [PERF OPT] Compare squared distance first, sqrt only inside branch */
-      const distSq = dx * dx + dy * dy + dz * dz;
-      const R2 = c.spec.influenceRadius * c.spec.influenceRadius;
-      const proximity = distSq <= R2 ? (1.25 - Math.sqrt(distSq) / c.spec.influenceRadius) : 0.35;
-      const housePower = 1 + (b.storedTokens || 0) * 0.45 + ((b.tier || 1) - 1) * 1.2;
-      score += proximity * housePower;
-    }
-
-    const globalGrowth = 1 + Math.min(1.6, totalBuildings * 0.08 + localCount * 0.14 + score * 0.06);
-    c.growthScale += (globalGrowth - c.growthScale) * 0.18;
-    c.group.scale.setScalar(c.growthScale);
-
-    const targetBoost = Math.min(110, score * 9.5 + localCount * 4.0);
-    c.elevationBoost += (targetBoost - c.elevationBoost) * 0.18;
-    c.group.position.copy(c.dir).multiplyScalar(c.baseR + c.spec.side * c.elevationBoost);
-  }
-}
 
 /* =========================================================
    RINGS
    ========================================================= */
 const routeRings = [];
 const savedRingCooldowns = store.get('ring_cooldowns', {});
-
 const ringGeo = new THREE.SphereGeometry(15, 16, 12);
-
-function makeVerticalRingQuaternion(radialDir, rowHeading){
-  const normal = new THREE.Vector3().crossVectors(radialDir, rowHeading);
-  if (normal.lengthSq() < 1e-4){
-    const fallback = Math.abs(radialDir.y) < 0.8 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
-    normal.crossVectors(radialDir, fallback);
-  }
-  normal.normalize();
-  return new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
-}
 
 const ringBands = [
   { side: 1, rOffset: 38, latSteps: 7, lonSteps: 12 },
@@ -1505,7 +1321,6 @@ ringBands.forEach((band) => {
         Math.sin(lat),
         Math.cos(lat) * Math.sin(lon)
       ).normalize();
-      const tangentHeading = new THREE.Vector3(-Math.sin(lon), 0.35 * Math.cos(i + j), Math.cos(lon)).normalize();
       const r = PLANET_RADIUS + band.side * band.rOffset;
       const pos = dir.clone().multiplyScalar(r);
 
@@ -1516,15 +1331,14 @@ ringBands.forEach((band) => {
       });
       const mesh = new THREE.Mesh(ringGeo, mat);
       mesh.position.copy(pos);
-      
       scene.add(mesh);
 
-      /* [PERF OPT] needsFadeUpdate flag to avoid touching materials every frame */
       routeRings.push({ mesh, mat, cooldownUntil: 0, needsFadeUpdate: false });
       ringIdxCounter++;
     }
   }
 });
+
 const nowInitMs = Date.now();
 routeRings.forEach((ring, idx) => {
   const until = Number(savedRingCooldowns[idx] || 0);
@@ -1550,459 +1364,6 @@ function updateRouteRingsFade(nowMs){
   }
 }
 
-/* =========================================================
-   HOUSES
-   ========================================================= */
-const buildingsGroup = new THREE.Group();
-scene.add(buildingsGroup);
-const buildingMeshes = new Map();
-/* [PERF OPT] O(1) lookup map */
-const buildingById = new Map();
-
-function getHouseHeight(b){
-  const invested = Math.max(0, (b.storedTokens || 0) + ((b.tier || 1) - 1) * 2);
-  return Math.max(4, 7 + invested * 2.2);
-}
-
-function getHouseSpan(b){
-  return b.isBridge ? 22 : 8;
-}
-
-function getBuildingSide(b){
-  if (b.side === 1 || b.side === -1) return b.side;
-  return player.position.length() < PLANET_RADIUS ? -1 : 1;
-}
-
-function getSurfaceSupportRadius(dir, side, ignoreId = null){
-  const nDir = dir.clone().normalize();
-  let topR = PLANET_RADIUS;
-  for (const b of buildings){
-    if (ignoreId && b.id === ignoreId) continue;
-    const bBase = new THREE.Vector3(b.x, b.y, b.z);
-    if (bBase.lengthSq() < 1e-4) continue;
-    const bSide = getBuildingSide(b);
-    if (bSide !== side) continue;
-    const bDir = bBase.clone().normalize();
-    const arcDist = nDir.angleTo(bDir) * PLANET_RADIUS;
-    const halfFootprint = (getHouseSpan(b) * 0.5) + 0.5;
-    if (arcDist < halfFootprint){
-      const roofR = PLANET_RADIUS + Math.abs(bBase.length() - PLANET_RADIUS) + getHouseHeight(b);
-      if (roofR > topR) topR = roofR;
-    }
-  }
-  return topR;
-}
-
-/* [PERF OPT] Shared house material + cached EdgesGeometry templates */
-const sharedHouseMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7, wireframe: true });
-const houseEdgeMatCache = new Map();
-function getHouseEdgeMaterial(color){
-  if (!houseEdgeMatCache.has(color)){
-    houseEdgeMatCache.set(color, new THREE.LineBasicMaterial({ color }));
-  }
-  return houseEdgeMatCache.get(color);
-}
-function getLandSurfaceRadiusAtDir(dir, side, ignoreId = null){
-  const nDir = dir.clone().normalize();
-  const info = sampleTerrainAtDir(nDir);
-  if (info.isPassThrough){
-    return null;
-  }
-  const baseTerrainR = side === -1 ? info.innerSolidR : info.outerSolidR;
-  const supportR = getSurfaceSupportRadius(nDir, side, ignoreId);
-  const supportOffset = Math.max(0, supportR - PLANET_RADIUS);
-  return baseTerrainR + side * supportOffset;
-}
-function upsertBuildingMesh(b){
-  const existing = buildingById.get(b.id);
-  if (existing) existing.storedTokens = b.storedTokens;
-  else {
-    buildingById.set(b.id, b);
-    buildings.push(b);
-  }
-  /* keep passed object in sync with store when remote update arrives */
-  const canonical = buildingById.get(b.id);
-  Object.assign(canonical, b);
-
-  if (buildingMeshes.has(b.id)){
-    const old = buildingMeshes.get(b.id);
-    buildingsGroup.remove(old);
-    const ci = collidableObjects.indexOf(old);
-    if (ci >= 0) collidableObjects.splice(ci, 1);
-  }
-
-  const basePos = new THREE.Vector3(b.x, b.y, b.z);
-  const dir = basePos.length() > 0.001 ? basePos.clone().normalize() : new THREE.Vector3(0, 1, 0);
-  const side = getBuildingSide(b);
-  const up = dir.clone().multiplyScalar(side);
-  const h = getHouseHeight(b);
-  const span = getHouseSpan(b);
-  const depth = b.isBridge ? 7 : 8;
-
-  const supportR = getSurfaceSupportRadius(dir, side, b.id);
-  const offsetFromSurface = Math.max(0, supportR - PLANET_RADIUS);
-  const actualR = PLANET_RADIUS + side * offsetFromSurface;
-  const flushBase = dir.clone().multiplyScalar(actualR);
-
-  const boxGeo = new THREE.BoxGeometry(span, h, depth);
-  const houseMesh = new THREE.Mesh(boxGeo, sharedHouseMat);
-  houseMesh.position.copy(flushBase).addScaledVector(up, h * 0.5);
-
-  const alignQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
-  if (b.isBridge && b.bridgeAxis){
-    const axisDir = new THREE.Vector3(b.bridgeAxis[0], b.bridgeAxis[1], b.bridgeAxis[2]).normalize();
-    const projAxis = axisDir.clone().sub(up.clone().multiplyScalar(axisDir.dot(up)));
-    if (projAxis.lengthSq() > 1e-4){
-      projAxis.normalize();
-      const localRight = new THREE.Vector3(1, 0, 0).applyQuaternion(alignQuat).normalize();
-      const yawAngle = localRight.angleTo(projAxis);
-      const cross = new THREE.Vector3().crossVectors(localRight, projAxis);
-      const sign = cross.dot(up) >= 0 ? 1 : -1;
-      const yawQuat = new THREE.Quaternion().setFromAxisAngle(up, sign * yawAngle);
-      houseMesh.quaternion.copy(yawQuat).multiply(alignQuat);
-    } else {
-      houseMesh.quaternion.copy(alignQuat);
-    }
-  } else {
-    houseMesh.quaternion.copy(alignQuat);
-  }
-
-  houseMesh.userData.buildingId = b.id;
-
-  const outlineCol = b.color || linePalette[buildings.length % linePalette.length];
-  const edges = new THREE.EdgesGeometry(boxGeo);
-  const lineMesh = new THREE.LineSegments(edges, getHouseEdgeMaterial(outlineCol));
-  houseMesh.add(lineMesh);
-
-  const nearestCenter = getNearestCenterSpec(flushBase);
-  addArchAccentToParent(houseMesh, nearestCenter.arch, h * 0.5, b.isBridge ? 0.9 : 0.78, outlineCol, false);
-
-  buildingsGroup.add(houseMesh);
-  buildingMeshes.set(b.id, houseMesh);
-  collidableObjects.push(houseMesh);
-}
-buildings.forEach(upsertBuildingMesh);
-const greeningGroup = new THREE.Group();
-scene.add(greeningGroup);
-const plantMeshes = new Map();
-const plantById = new Map();
-const greenPatchMat = new THREE.MeshStandardMaterial({
-  color: 0x22c55e,
-  roughness: 0.75,
-  metalness: 0.05,
-  transparent: true,
-  opacity: 0.72,
-  side: THREE.DoubleSide,
-  wireframe: true
-});
-const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.85, wireframe: true });
-const treeCrownMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.65, wireframe: true });
-
-function getUnevenSurfaceRadiusAtDir(dir, side, ignoreId = null){
-  const nDir = dir.clone().normalize();
-  const info = sampleTerrainAtDir(nDir);
-  if (info.isPassThrough){
-    return null;
-  }
-  const terrainR = side === -1 ? info.innerSolidR : info.outerSolidR;
-  const supportR = getSurfaceSupportRadius(nDir, side, ignoreId);
-  const supportOffset = Math.max(0, supportR - PLANET_RADIUS);
-  return terrainR + side * supportOffset;
-}
-
-function buildUnevenProjectedSquareGeometry(centerDir, side, patchSize, segs = 16){
-  const up = centerDir.clone().multiplyScalar(side);
-  let refAxis = new THREE.Vector3(0, 1, 0).cross(up);
-  if (refAxis.lengthSq() < 1e-4) refAxis = new THREE.Vector3(1, 0, 0).cross(up);
-  refAxis.normalize();
-  const bitangentAxis = new THREE.Vector3().crossVectors(up, refAxis).normalize();
-
-  const positions = [];
-  const indices = [];
-  const samplePt = new THREE.Vector3();
-
-  for (let iy = 0; iy <= segs; iy++){
-    const v = iy / segs;
-    const offsetV = ((v - 0.5) * patchSize) / PLANET_RADIUS;
-    for (let ix = 0; ix <= segs; ix++){
-      const u = ix / segs;
-      const offsetU = ((u - 0.5) * patchSize) / PLANET_RADIUS;
-
-      samplePt.copy(centerDir)
-        .addScaledVector(refAxis, offsetU)
-        .addScaledVector(bitangentAxis, offsetV)
-        .normalize();
-
-      const surfR = getUnevenSurfaceRadiusAtDir(samplePt, side);
-      const r = surfR !== null ? surfR : (side === -1 ? PLANET_RADIUS - 24 : PLANET_RADIUS + 18);
-      const lift = side * 0.4;
-      positions.push(
-        samplePt.x * (r + lift),
-        samplePt.y * (r + lift),
-        samplePt.z * (r + lift)
-      );
-    }
-  }
-
-  const rowStride = segs + 1;
-  for (let iy = 0; iy < segs; iy++){
-    for (let ix = 0; ix < segs; ix++){
-      const a = iy * rowStride + ix;
-      const b = a + 1;
-      const c = (iy + 1) * rowStride + ix;
-      const d = c + 1;
-      indices.push(a, c, b, b, c, d);
-    }
-  }
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setIndex(indices);
-  geo.computeVertexNormals();
-  return geo;
-}
-
-function addTreeOnUnevenSurface(treeDir, side, targetContainer = greeningGroup){
-  const nDir = treeDir.clone().normalize();
-  const surfR = getUnevenSurfaceRadiusAtDir(nDir, side);
-  if (surfR === null) return false;
-
-  const treeUp = nDir.clone().multiplyScalar(side);
-  const treeBasePos = nDir.clone().multiplyScalar(surfR);
-
-  const treeGroup = new THREE.Group();
-  treeGroup.position.copy(treeBasePos);
-  treeGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), treeUp);
-
-  const trunkGeo = new THREE.CylinderGeometry(0.45, 0.75, 4.2, 8);
-  const trunk = new THREE.Mesh(trunkGeo, treeTrunkMat);
-  trunk.position.y = 2.1;
-
-  const crownGeo = new THREE.ConeGeometry(2.8, 6.8, 10);
-  const crown = new THREE.Mesh(crownGeo, treeCrownMat);
-  crown.position.y = 6.4;
-
-  treeGroup.add(trunk, crown);
-  targetContainer.add(treeGroup);
-  return true;
-}
-
-function upsertPlantMesh(p){
-  if (!p || !p.id || plantById.has(p.id)) return;
-  plantById.set(p.id, p);
-  if (!plants.some(item => item.id === p.id)){
-    plants.push(p);
-  }
-
-  const side = p.side === -1 ? -1 : 1;
-  const dir = new THREE.Vector3(p.dx, p.dy, p.dz).normalize();
-  if (sampleTerrainAtDir(dir).isPassThrough) return;
-
-  const container = new THREE.Group();
-
-
-  if (Array.isArray(p.trees) && p.trees.length){
-    const t = p.trees[0];
-    addTreeOnUnevenSurface(new THREE.Vector3(t[0], t[1], t[2]), side, container);
-  } else {
-    addTreeOnUnevenSurface(dir, side, container);
-  }
-
-  greeningGroup.add(container);
-  plantMeshes.set(p.id, container);
-}
-
-plants.forEach(upsertPlantMesh);
-
-function createGreenPatchAndTree(aimPoint){
-  const pLen = player.position.length();
-  const side = pLen < PLANET_RADIUS ? -1 : 1;
-  const dir = aimPoint.lengthSq() > 1e-4 ? aimPoint.clone().normalize() : new THREE.Vector3(0, 1, 0);
-
-  if (sampleTerrainAtDir(dir).isPassThrough){
-    appendChatLine('System', 'Cannot plant on a pass-through zone');
-    return;
-  }
-
-  const patchSize = 20;
-  const centerSurfR = getUnevenSurfaceRadiusAtDir(dir, side);
-  const patchPos = dir.clone().multiplyScalar(centerSurfR !== null ? centerSurfR : PLANET_RADIUS);
-
-  const treeDirs = [[Number(dir.x.toFixed(6)), Number(dir.y.toFixed(6)), Number(dir.z.toFixed(6))]];
-
-  const newPlant = {
-    id: 'p_' + Date.now() + '_' + Math.random().toString(16).slice(2, 6),
-    owner: myPeerId,
-    dx: Number(dir.x.toFixed(6)),
-    dy: Number(dir.y.toFixed(6)),
-    dz: Number(dir.z.toFixed(6)),
-    side,
-    trees: treeDirs
-  };
-
-  upsertPlantMesh(newPlant);
-  store.set('plants', plants);
-  publishMqtt({ type: 'PLANT_PLANTED', plant: newPlant });
-}
-
-function doesOverlapExistingBuilding(candidatePos, candidateRadius, ignoreId = null){
-  for (const b of buildings){
-    if (ignoreId && b.id === ignoreId) continue;
-    const bPos = new THREE.Vector3(b.x, b.y, b.z);
-    const bSide = getBuildingSide(b);
-    const bDir = bPos.length() > 0.001 ? bPos.clone().normalize() : new THREE.Vector3(0, 1, 0);
-    const bUp = bDir.clone().multiplyScalar(bSide);
-    const bH = getHouseHeight(b);
-    const bCenter = bPos.clone().addScaledVector(bUp, bH * 0.5);
-    const minSep = candidateRadius + Math.max(4.5, bH * 0.45);
-    /* [PERF OPT] distanceToSquared */
-    if (candidatePos.distanceToSquared(bCenter) < minSep * minSep){
-      return true;
-    }
-  }
-  return false;
-}
-
-const aimRaycaster = new THREE.Raycaster();
-function getAimedWorldPoint(){
-  const rect = attackBtn.getBoundingClientRect();
-  const cx = rect.left + rect.width * 0.5;
-  const cy = rect.top + rect.height * 0.5;
-  const ndc = new THREE.Vector2(
-    (cx / window.innerWidth) * 2 - 1,
-    -(cy / window.innerHeight) * 2 + 1
-  );
-  camera.updateMatrixWorld();
-  aimRaycaster.setFromCamera(ndc, camera);
-
-  const camPos = camera.getWorldPosition(_tmpVec4);
-  const rayDir = aimRaycaster.ray.direction;
-  const playerSide = player.position.length() < PLANET_RADIUS ? -1 : 1;
-
-  const b = camPos.dot(rayDir);
-  const c = camPos.lengthSq() - PLANET_RADIUS * PLANET_RADIUS;
-  const disc = b * b - c;
-
-if (disc >= 0){
-    const sqrtDisc = Math.sqrt(disc);
-    const tNear = -b - sqrtDisc;
-    const tFar = -b + sqrtDisc;
-    const baseT = playerSide === 1
-      ? (tNear > 0.1 ? tNear : (tFar > 0.1 ? tFar : null))
-      : (tFar > 0.1 ? tFar : null);
-
-    if (baseT !== null){
-      const pt = _tmpVec5.copy(camPos).addScaledVector(rayDir, baseT);
-      const len = pt.length();
-      if (len > 0.001){
-        const hitDir = pt.divideScalar(len);
-        const surfR = getUnevenSurfaceRadiusAtDir(hitDir, playerSide);
-        if (surfR !== null){
-          return hitDir.clone().multiplyScalar(surfR);
-        }
-      }
-      return pt.clone();
-    }
-  }
-
-  const fallbackDir = rayDir.clone().normalize();
-  const fallbackSurfR = getUnevenSurfaceRadiusAtDir(fallbackDir, playerSide);
-  return fallbackDir.multiplyScalar(fallbackSurfR !== null ? fallbackSurfR : PLANET_RADIUS);
-}
-
-function computePlacementOnPlayerSide(aimPoint){
-  const playerSide = player.position.length() < PLANET_RADIUS ? -1 : 1;
-  let dir = aimPoint.length() > 0.001 ? aimPoint.clone().normalize() : new THREE.Vector3(0, 1, 0);
-
-  if (sampleTerrainAtDir(dir).isPassThrough){
-    return null;
-  }
-
-  let anchorBuilding = null;
-  let bestAnchorDist = 26;
-  for (const b of buildings){
-    const bBase = new THREE.Vector3(b.x, b.y, b.z);
-    const bSide = getBuildingSide(b);
-    if (bSide !== playerSide) continue;
-    const bDir = bBase.clone().normalize();
-    const d = dir.angleTo(bDir) * PLANET_RADIUS;
-    if (d > 5.0 && d < bestAnchorDist){
-      bestAnchorDist = d;
-      anchorBuilding = b;
-    }
-  }
-
-  if (anchorBuilding){
-    const aBase = new THREE.Vector3(anchorBuilding.x, anchorBuilding.y, anchorBuilding.z);
-    const aDir = aBase.clone().normalize();
-    const aUp = aDir.clone().multiplyScalar(playerSide);
-    const tangent = dir.clone().sub(aDir.clone().multiplyScalar(dir.dot(aDir)));
-    if (tangent.lengthSq() > 1e-5){
-      tangent.normalize();
-      const rotAxis = new THREE.Vector3().crossVectors(aDir, tangent).normalize();
-      const midDir = aDir.clone().applyAxisAngle(rotAxis, 11 / PLANET_RADIUS).normalize();
-      if (!sampleTerrainAtDir(midDir).isPassThrough){
-        const midSupportR = getSurfaceSupportRadius(midDir, playerSide);
-        const bridgeOffset = Math.max(0, midSupportR - PLANET_RADIUS);
-        const bridgeBase = midDir.clone().multiplyScalar(PLANET_RADIUS + playerSide * bridgeOffset);
-        const candCenter = bridgeBase.clone().addScaledVector(aUp, 3.5);
-        if (!doesOverlapExistingBuilding(candCenter, 6.5)){
-          return {
-            basePos: bridgeBase,
-            side: playerSide,
-            tier: (anchorBuilding.tier || 1) + 1,
-            isBridge: true,
-            bridgeAxis: [tangent.x, tangent.y, tangent.z]
-          };
-        }
-      }
-    }
-  }
-
-  let topSupportR = getSurfaceSupportRadius(dir, playerSide);
-  let stackedTier = 1;
-
-  for (const b of buildings){
-    const bBase = new THREE.Vector3(b.x, b.y, b.z);
-    const bSide = getBuildingSide(b);
-    if (bSide !== playerSide) continue;
-    const bDir = bBase.clone().normalize();
-    const angDist = dir.angleTo(bDir) * PLANET_RADIUS;
-    if (angDist < 4.5){
-      const roofSupportR = PLANET_RADIUS + Math.max(0, getSurfaceSupportRadius(bDir, playerSide) - PLANET_RADIUS) + getHouseHeight(b);
-      if (roofSupportR > topSupportR){
-        topSupportR = roofSupportR;
-        stackedTier = (b.tier || 1) + 1;
-      }
-    }
-  }
-
-  const up = dir.clone().multiplyScalar(playerSide);
-  let basePos = dir.clone().multiplyScalar(PLANET_RADIUS + playerSide * Math.max(0, topSupportR - PLANET_RADIUS));
-  let candCenter = basePos.clone().addScaledVector(up, 4.5);
-  let attempt = 0;
-  while (doesOverlapExistingBuilding(candCenter, 4.8) && attempt < 12){
-    attempt++;
-    const rotAxis = new THREE.Vector3(0, 1, 0).cross(dir);
-    if (rotAxis.lengthSq() < 1e-4) rotAxis.set(1, 0, 0);
-    rotAxis.normalize();
-    const nextDir = dir.clone().applyAxisAngle(rotAxis, 0.008 * attempt).normalize();
-    if (sampleTerrainAtDir(nextDir).isPassThrough) continue;
-    dir = nextDir;
-    const rTry = Math.max(0, getSurfaceSupportRadius(dir, playerSide) - PLANET_RADIUS);
-    basePos = dir.clone().multiplyScalar(PLANET_RADIUS + playerSide * rTry);
-    candCenter = basePos.clone().addScaledVector(dir.clone().multiplyScalar(playerSide), 4.5);
-  }
-
-  return {
-    basePos,
-    side: playerSide,
-    tier: stackedTier,
-    isBridge: false,
-    bridgeAxis: null
-  };
-}
-
 const backgroundPlanets = [];
 [
   { radius: 500, color: 0xe27b58, x: 3500, y: 7800, z: -2000, rotSpeed: 0.002 },
@@ -2021,18 +1382,13 @@ const backgroundPlanets = [];
 /* =========================================================
    MQTT MULTIPLAYER
    ========================================================= */
-
 const BROKER_URL = 'wss://test.mosquitto.org:8081/mqtt';
 const TOPIC = 'outside_in_planet/megacity/v1';
 let mqttClient = null;
 const remotePeers = new Map();
-let activeRemoteAttacks = {};
-let hasMovedFromOrigin = false;
-/* [PERF OPT] Only publish STATE when position actually changed */
 let lastPublishedPos = { x: 0, y: 0, z: 0 };
 const seenMsgKeys = new Map();
 let lastStatePublishMs = 0;
-
 
 function createPeerSubjectGroup(labelText){
   const group = new THREE.Group();
@@ -2049,7 +1405,7 @@ function createPeerSubjectGroup(labelText){
   );
   group.add(coreMesh);
 
-const glassShell = new THREE.Mesh(
+  const glassShell = new THREE.Mesh(
     new THREE.SphereGeometry(3.3, 48, 36),
     new THREE.MeshPhysicalMaterial({
       color: 0xdbeafe,
@@ -2089,36 +1445,7 @@ function getOrCreateRemotePeer(id, label = id){
   return entry;
 }
 
-let showPeerNames = store.get('show_peer_names', true);
-
-function syncNameToggleUI(){
-  if (!nameToggleBtn) return;
-  nameToggleBtn.textContent = showPeerNames ? 'Name' : 'Noname';
-  nameToggleBtn.classList.toggle('off', !showPeerNames);
-  if (!showPeerNames){
-    for (const entry of remotePeers.values()){
-      entry.tagEl.style.display = 'none';
-    }
-  }
-}
-
-if (nameToggleBtn){
-  syncNameToggleUI();
-  nameToggleBtn.addEventListener('click', () => {
-    showPeerNames = !showPeerNames;
-    store.set('show_peer_names', showPeerNames);
-    syncNameToggleUI();
-    updatePeerLabelsScreenPosition();
-  });
-}
-
 function updatePeerLabelsScreenPosition(){
-  if (!showPeerNames){
-    for (const entry of remotePeers.values()){
-      entry.tagEl.style.display = 'none';
-    }
-    return;
-  }
   const w = window.innerWidth;
   const h = window.innerHeight;
   for (const entry of remotePeers.values()){
@@ -2186,24 +1513,8 @@ function publishCurrentState(force = false){
   lastStatePublishMs = now;
 }
 
-function broadcastLocalCreations(){
-  const queue = [];
-  buildings.forEach((b) => {
-    queue.push({ type: 'BUILDING_BUILT', building: b });
-  });
-  plants.forEach((p) => {
-    queue.push({ type: 'PLANT_PLANTED', plant: p });
-  });
-  queue.forEach((msg, index) => {
-    setTimeout(() => {
-      publishMqtt(msg);
-    }, index * 35);
-  });
-}
-
 function isDuplicateMqttMessage(data){
-  const objId = (data.building && data.building.id) || (data.plant && data.plant.id) || data.buildingId || '';
-  const key = `${data.sid || ''}|${data.sender || ''}|${data.type || ''}|${objId}|${data.ts || 0}`;
+  const key = `${data.sid || ''}|${data.sender || ''}|${data.type || ''}|${data.ts || 0}`;
   const now = Date.now();
   for (const [k, exp] of seenMsgKeys.entries()){
     if (exp < now) seenMsgKeys.delete(k);
@@ -2212,6 +1523,7 @@ function isDuplicateMqttMessage(data){
   seenMsgKeys.set(key, now + 5000);
   return false;
 }
+
 function publishMqtt(payload){
   if (!mqttClient || !mqttClient.connected) return;
   const msg = Object.assign({
@@ -2223,13 +1535,14 @@ function publishMqtt(payload){
     mqttClient.publish(TOPIC, JSON.stringify(msg), { qos: 0 });
   }catch{}
 }
+
 function connectMqttBroker(){
   if (mqttClient){
     try{ mqttClient.removeAllListeners(); mqttClient.end(true); }catch{}
     mqttClient = null;
   }
 
-try{
+  try{
     mqttClient = mqtt.connect(BROKER_URL, {
       clientId,
       reconnectPeriod: 3000,
@@ -2242,7 +1555,6 @@ try{
       mqttClient.subscribe(TOPIC, { qos: 0 });
       updatePresenceUI();
       publishCurrentState(true);
-      setTimeout(() => broadcastLocalCreations(), 300);
       publishMqtt({ type: 'SYNC_REQUEST' });
     });
 
@@ -2269,10 +1581,6 @@ try{
         updatePresenceUI();
       } else if (data.type === 'SYNC_REQUEST'){
         publishCurrentState(true);
-        broadcastLocalCreations();
-      } else if (data.type === 'PLANT_PLANTED' && data.plant){
-        upsertPlantMesh(data.plant);
-        store.set('plants', plants);
       } else if (data.type === 'CHAT' && typeof data.text === 'string'){
         appendChatLine(data.sender || 'Peer', data.text);
       } else if (data.type === 'TRANSFER' && data.to === myPeerId){
@@ -2282,35 +1590,15 @@ try{
         if (stolen > 0){
           recordTokenDelta(-stolen, `Hacked by ${data.attacker || data.sender || 'peer'}`, true);
         }
-      } else if (data.type === 'BUILDING_BUILT' && data.building){
-        upsertBuildingMesh(data.building);
-        store.set('buildings', buildings);
-      } else if (data.type === 'BUILDING_LOOTED'){
-        const b = buildingById.get(data.buildingId);
-        if (b){
-          b.storedTokens = Math.max(0, (b.storedTokens || 0) - Number(data.amount || 0));
-          upsertBuildingMesh(b);
-          store.set('buildings', buildings);
-        }
       } else if (data.type === 'AUTHOR_SHARE' && data.to === myPeerId){
         const shareAmt = Number(data.amount || 0);
         if (shareAmt > 0){
-          const srcLabel = data.source === 'house_build' ? 'House fee' : 'Transfer fee';
-          recordTokenDelta(shareAmt, `${srcLabel} from ${data.from || data.sender || 'peer'}`, false);
-        }
-      } else if (data.type === 'FREEZE_PLAYER' && data.target === myPeerId){
-        applyFreezeToSelf(data.durationMs || 6000);
-      } else if (data.type === 'FREEZE_STATE'){
-        if (data.active){
-          activeRemoteAttacks[data.target] = { attacker: data.attacker, until: Date.now() + (data.durationMs || 6000) };
-        } else {
-          delete activeRemoteAttacks[data.target];
+          recordTokenDelta(shareAmt, `Transfer fee from ${data.from || data.sender || 'peer'}`, false);
         }
       }
     });
   }catch{}
 }
-
 
 function appendChatLine(sender, text){
   const div = document.createElement('div');
@@ -2334,7 +1622,6 @@ function appendChatLine(sender, text){
 
 connectMqttBroker();
 
-
 let lastSyncRequestMs = 0;
 setInterval(() => {
   publishCurrentState(false);
@@ -2345,7 +1632,6 @@ setInterval(() => {
     publishMqtt({ type: 'SYNC_REQUEST' });
   }
 }, 1500);
-
 
 function sendChat(){
   const txt = chatInput.value.trim();
@@ -2391,68 +1677,10 @@ window.addEventListener('pagehide', () => {
   saveEconomy();
 });
 
-
-
 /* =========================================================
-   RETICLE
+   RETICLE (HACK ONLY BY DEFAULT)
    ========================================================= */
-let selectedReticleMode = 'build';
-let menuOpenedAt = 0;
-
-const reticleModeTagEl = document.getElementById('reticleModeTag');
-
-function syncReticleModeTag(){
-  if (!reticleModeTagEl) return;
-  reticleModeTagEl.textContent = selectedReticleMode;
-  reticleModeTagEl.classList.remove('mode-build', 'mode-attack', 'mode-hack');
-  reticleModeTagEl.classList.add('mode-' + selectedReticleMode);
-}
-
-function syncMenuSelectionUI(){
-  reticleMenu.querySelectorAll('.rm-item').forEach(b => {
-    b.classList.toggle('selected', b.dataset.mode === selectedReticleMode);
-  });
-  syncReticleModeTag();
-}
-syncReticleModeTag();
-
-function openReticleMenu(){
-  syncMenuSelectionUI();
-  const r = attackBtn.getBoundingClientRect();
-  const left = Math.max(8, Math.min(window.innerWidth - 194, r.left - 62));
-  const top = Math.max(40, r.top - 160);
-  reticleMenu.style.left = left + 'px';
-  reticleMenu.style.top = top + 'px';
-  menuOpenedAt = performance.now();
-  reticleMenu.classList.add('open');
-}
-function closeReticleMenu(){
-  reticleMenu.classList.remove('open');
-}
-
-reticleMenu.querySelectorAll('.rm-item').forEach(btn => {
-  btn.addEventListener('pointerdown', (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-  });
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (!reticleMenu.classList.contains('open')) return;
-    if (performance.now() - menuOpenedAt < 260) return;
-    selectedReticleMode = btn.dataset.mode;
-    syncMenuSelectionUI();
-    closeReticleMenu();
-  });
-});
-
-document.addEventListener('pointerdown', (e) => {
-  if (!reticleMenu.classList.contains('open')) return;
-  if (performance.now() - menuOpenedAt < 180) return;
-  if (!reticleMenu.contains(e.target) && !attackBtn.contains(e.target)){
-    closeReticleMenu();
-  }
-});
+const DEFAULT_MODE = 'hack';
 
 const keys = {};
 let lastSpaceTime = 0;
@@ -2465,13 +1693,13 @@ window.addEventListener('keydown', (e) => {
     if (now - lastSpaceTime < 250) superThrust = true;
     lastSpaceTime = now;
   }
-  if (e.code === 'KeyF' && !keys['KeyF']) startSelectedAction();
+  if (e.code === 'KeyF' && !keys['KeyF']) startHackAction();
   keys[e.code] = true;
 });
 window.addEventListener('keyup', (e) => {
   keys[e.code] = false;
   if (e.code === 'Space') superThrust = false;
-  if (e.code === 'KeyF') stopHoldAction();
+  if (e.code === 'KeyF') stopHackAction();
 });
 
 let mouseDragging = false, lastMouseX = 0, lastMouseY = 0;
@@ -2489,18 +1717,12 @@ window.addEventListener('mouseup', () => {
   if (mouseDragging){ mouseDragging = false; touchJoystick.active = false; touchJoystick.moveX = 0; touchJoystick.moveY = 0; }
 });
 
-let isHoldingAttack = false;
-let holdStartTime = 0;
-let holdMode = null;
-let targetBuildingId = null;
+let isHoldingHack = false;
+let hackStartTime = 0;
 let targetPeerId = null;
-let lastDepositStep = 0;
-let lastDrainStep = 0;
-let frozenUntil = 0;
-let freezeCooldownUntil = 0;
+let lastStealStep = 0;
 let longPressTimer = null;
-let longPressTriggered = false;
-let btnDrag = { active: false, moved: false, downAt: 0, ox: 0, oy: 0, sx: 0, sy: 0 };
+let btnDrag = { active: false, moved: false, ox: 0, oy: 0, sx: 0, sy: 0 };
 
 function clearLongPressTimer(){
   if (longPressTimer !== null){
@@ -2509,46 +1731,16 @@ function clearLongPressTimer(){
   }
 }
 
-function applyFreezeToSelf(durationMs){
-  frozenUntil = Math.max(frozenUntil, Date.now() + durationMs);
-}
-
-function findNearestBuilding(fromPos, maxDist = 35){
-  let best = null;
-  /* [PERF OPT] Compare squared distances */
-  let bestDSq = maxDist * maxDist;
-  for (const b of buildings){
-    const dx = fromPos.x - b.x;
-    const dy = fromPos.y - b.y;
-    const dz = fromPos.z - b.z;
-    const dSq = dx * dx + dy * dy + dz * dz;
-    if (dSq < bestDSq){ bestDSq = dSq; best = b; }
-  }
-  return best;
-}
-
-function findNearestPeer(maxDist = 65){
-  let bestId = null;
-  let bestDSq = maxDist * maxDist;
-  for (const [pid, entry] of remotePeers.entries()){
-    const dSq = player.position.distanceToSquared(entry.mesh.position);
-    if (dSq < bestDSq){
-      bestDSq = dSq;
-      bestId = pid;
-    }
-  }
-  return bestId;
-}
-function findBestTargetInCone(candidates, maxRange = 120, minCosAngle = 0.86){
+function findPeerInCone(maxRange = 120, minCosAngle = 0.86){
   camera.updateMatrixWorld();
   const origin = camera.getWorldPosition(_tmpVec4);
-  const forward = _tmpVec5.set(0, 0, -1).applyQuaternion(camera.getWorldQuaternion(_tmpQuat1)).normalize();
+  const forward = _tmpVec3.set(0, 0, -1).applyQuaternion(camera.getWorldQuaternion(_tmpQuat1)).normalize();
 
-  let bestItem = null;
+  let bestId = null;
   let bestScore = Infinity;
 
-  for (const item of candidates){
-    _tmpVec1.copy(item.pos).sub(origin);
+  for (const [pid, entry] of remotePeers.entries()){
+    _tmpVec1.copy(entry.mesh.position).sub(origin);
     const dist = _tmpVec1.length();
     if (dist < 0.001 || dist > maxRange) continue;
     _tmpVec1.divideScalar(dist);
@@ -2559,131 +1751,29 @@ function findBestTargetInCone(candidates, maxRange = 120, minCosAngle = 0.86){
     const score = dist + anglePenalty;
     if (score < bestScore){
       bestScore = score;
-      bestItem = item;
+      bestId = pid;
     }
   }
-  return bestItem;
+  return bestId;
 }
 
-function findPeerInCone(maxRange = 120, minCosAngle = 0.86){
-  const list = [];
-  for (const [pid, entry] of remotePeers.entries()){
-    list.push({ id: pid, label: entry.label || pid, pos: entry.mesh.position });
-  }
-  const hit = findBestTargetInCone(list, maxRange, minCosAngle);
-  return hit ? hit.id : null;
+function startHackAction(){
+  if (isHoldingHack) return;
+  const nearPeer = findPeerInCone(120, 0.86);
+  if (!nearPeer) return;
+  targetPeerId = nearPeer;
+  lastStealStep = 0;
+  isHoldingHack = true;
+  hackStartTime = performance.now();
+  attackBtn.classList.add('active');
+  publishMqtt({ type: 'PEER_HACK_ALERT', target: nearPeer, attacker: myPeerId });
 }
 
-function findHackableBuildingInCone(maxRange = 120, minCosAngle = 0.86){
-  const list = [];
-  for (const b of buildings){
-    if (b.owner === myPeerId || (b.storedTokens || 0) <= 0) continue;
-    list.push({
-      building: b,
-      pos: new THREE.Vector3(b.x, b.y, b.z)
-    });
-  }
-  const hit = findBestTargetInCone(list, maxRange, minCosAngle);
-  return hit ? hit.building : null;
-}
-function startSelectedAction(){
-  closeReticleMenu();
-  if (Date.now() < frozenUntil) return;
-  const incomingFreeze = activeRemoteAttacks[myPeerId];
-  if (incomingFreeze && incomingFreeze.until > Date.now() && incomingFreeze.attacker !== myPeerId) return;
-  if (isHoldingAttack) return;
-
-  const aimPt = getAimedWorldPoint();
-
-if (selectedReticleMode === 'hack'){
-    const nearPeer = findPeerInCone(120, 0.86);
-    const nearB = findHackableBuildingInCone(120, 0.86);
-    if (nearPeer){
-      holdMode = 'hack_peer';
-      targetPeerId = nearPeer;
-      targetBuildingId = null;
-      lastDrainStep = 0;
-      isHoldingAttack = true;
-      holdStartTime = performance.now();
-      attackBtn.classList.add('active');
-      publishMqtt({ type: 'PEER_HACK_ALERT', target: nearPeer, attacker: myPeerId });
-      return;
-    }
-    if (!nearB) return;
-    holdMode = 'hack';
-    targetBuildingId = nearB.id;
-    targetPeerId = null;
-    lastDrainStep = 0;
-    isHoldingAttack = true;
-    holdStartTime = performance.now();
-    attackBtn.classList.add('active');
-    publishMqtt({ type: 'BUILDING_ALERT', buildingId: nearB.id, owner: nearB.owner, attacker: myPeerId });
-  } else if (selectedReticleMode === 'attack'){
-    const nearP = findPeerInCone(120, 0.86);
-    if (!nearP || Date.now() < freezeCooldownUntil) return;
-    holdMode = 'attack';
-    targetPeerId = nearP;
-    isHoldingAttack = true;
-    holdStartTime = performance.now();
-    attackBtn.classList.add('active');
-    const durMs = 6000;
-    publishMqtt({ type: 'FREEZE_PLAYER', target: nearP, attacker: myPeerId, durationMs: durMs });
-    publishMqtt({ type: 'FREEZE_STATE', target: nearP, attacker: myPeerId, active: true, durationMs: durMs });
-    freezeCooldownUntil = Date.now() + 7500;
-} else if (selectedReticleMode === 'plant'){
-    if (tokens < 1) return;
-    recordTokenDelta(-1, 'Plant greening', true);
-    createGreenPatchAndTree(aimPt);
-    appendChatLine('System', 'Planted green patch and tree near center');
-  } else {
-    if (tokens < 1) return;
-    const placed = computePlacementOnPlayerSide(aimPt);
-    if (!placed){
-      appendChatLine('System', 'Cannot build on a pass-through zone');
-      return;
-    }
-
-    holdMode = 'build';
-    targetBuildingId = null;
-    lastDepositStep = 0;
-    isHoldingAttack = true;
-    holdStartTime = performance.now();
-    attackBtn.classList.add('active');
-
-    recordTokenDelta(-1, 'Build house', true);
-
-    const newB = {
-      id: 'b_' + Date.now() + '_' + Math.random().toString(16).slice(2, 6),
-      owner: myPeerId,
-      x: Number(placed.basePos.x.toFixed(1)),
-      y: Number(placed.basePos.y.toFixed(1)),
-      z: Number(placed.basePos.z.toFixed(1)),
-      side: placed.side,
-      storedTokens: 0,
-      tier: placed.tier,
-      isBridge: placed.isBridge,
-      bridgeAxis: placed.bridgeAxis,
-      color: linePalette[buildings.length % linePalette.length]
-    };
-    targetBuildingId = newB.id;
-    upsertBuildingMesh(newB);
-    store.set('buildings', buildings);
-    publishMqtt({ type: 'BUILDING_BUILT', building: newB });
-    routeAuthorFee(1, 'house_build', newB.id);
-  }
-}
-
-function stopHoldAction(){
+function stopHackAction(){
   clearLongPressTimer();
-  longPressTriggered = false;
-  if (!isHoldingAttack) return;
-  isHoldingAttack = false;
+  if (!isHoldingHack) return;
+  isHoldingHack = false;
   attackBtn.classList.remove('active');
-  if (holdMode === 'attack' && targetPeerId){
-    publishMqtt({ type: 'FREEZE_STATE', target: targetPeerId, attacker: myPeerId, active: false });
-  }
-  holdMode = null;
-  targetBuildingId = null;
   targetPeerId = null;
 }
 
@@ -2692,11 +1782,9 @@ attackBtn.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   attackBtn.setPointerCapture(e.pointerId);
   const r = attackBtn.getBoundingClientRect();
-  longPressTriggered = false;
   btnDrag = {
     active: true,
     moved: false,
-    downAt: performance.now(),
     ox: e.clientX - r.left,
     oy: e.clientY - r.top,
     sx: e.clientX,
@@ -2705,8 +1793,7 @@ attackBtn.addEventListener('pointerdown', (e) => {
   clearLongPressTimer();
   longPressTimer = setTimeout(() => {
     if (btnDrag.active && !btnDrag.moved){
-      longPressTriggered = true;
-      startSelectedAction();
+      startHackAction();
     }
   }, LONG_PRESS_MS);
 });
@@ -2715,9 +1802,9 @@ attackBtn.addEventListener('pointermove', (e) => {
   if (!btnDrag.active) return;
   if (Math.hypot(e.clientX - btnDrag.sx, e.clientY - btnDrag.sy) > 8){
     btnDrag.moved = true;
+    clearLongPressTimer();
   }
   if (btnDrag.moved){
-    closeReticleMenu();
     const nx = Math.max(8, Math.min(window.innerWidth - 64, e.clientX - btnDrag.ox));
     const ny = Math.max(66, Math.min(window.innerHeight - 104, e.clientY - btnDrag.oy));
     reticleWrapEl.style.left = nx + 'px';
@@ -2730,15 +1817,8 @@ attackBtn.addEventListener('pointermove', (e) => {
 const onReticleRelease = (e) => {
   if (e) e.stopPropagation();
   if (!btnDrag.active) return;
-  const elapsed = performance.now() - btnDrag.downAt;
-  const wasQuickTap = !btnDrag.moved && !longPressTriggered && elapsed < LONG_PRESS_MS;
   btnDrag.active = false;
-  stopHoldAction();
-
-  if (wasQuickTap){
-    if (reticleMenu.classList.contains('open')) closeReticleMenu();
-    else openReticleMenu();
-  }
+  stopHackAction();
 };
 
 attackBtn.addEventListener('pointerup', onReticleRelease);
@@ -2757,9 +1837,6 @@ const maxTransferBtn = document.getElementById('maxTransferBtn');
 const expenseHistoryList = document.getElementById('expenseHistoryList');
 const deleteSelectedHistBtn = document.getElementById('deleteSelectedHistBtn');
 const selectAllHistBtn = document.getElementById('selectAllHistBtn');
-const builtCountEl = document.getElementById('builtCountEl');
-const builtHousesList = document.getElementById('builtHousesList');
-const withdrawAllBtn = document.getElementById('withdrawAllBtn');
 
 const CANVAS_FONT_STACK = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
@@ -2790,8 +1867,7 @@ function getFilteredSeries(){
   };
   const cutoff = now - (msMap[selectedTimeframe] || msMap.day);
   const filtered = base.filter(p => (p.t || now) >= cutoff);
-  if (filtered.length) return filtered;
-  return [base[base.length - 1]];
+  return filtered.length ? filtered : [base[base.length - 1]];
 }
 
 let chartScrollDrag = { active: false, lastY: 0 };
@@ -2916,105 +1992,8 @@ deleteSelectedHistBtn.addEventListener('click', () => {
   renderExpenseHistory();
 });
 
-function withdrawFromHouse(b, idx){
-  if (!b) return 0;
-  const amt = Number(b.storedTokens || 0);
-  if (!Number.isFinite(amt) || amt <= 0) return 0;
-  b.storedTokens = 0;
-  upsertBuildingMesh(b);
-  store.set('buildings', buildings);
-  recordTokenDelta(amt, `Withdraw house #${idx + 1}`, false);
-  publishMqtt({ type: 'BUILDING_BUILT', building: b });
-  return amt;
-}
-
-withdrawAllBtn.addEventListener('click', () => {
-  const myHouses = buildings.filter(b => b.owner === myPeerId);
-  let totalWithdrawn = 0;
-  myHouses.forEach((b, i) => {
-    totalWithdrawn += withdrawFromHouse(b, i);
-  });
-  if (totalWithdrawn > 0){
-    drawChart();
-    renderBuiltHouses();
-  }
-});
-function teleportToBuilding(b){
-  const basePos = new THREE.Vector3(b.x, b.y, b.z);
-  const dir = basePos.length() > 0.001 ? basePos.clone().normalize() : new THREE.Vector3(0, 1, 0);
-  const side = getBuildingSide(b);
-  const up = dir.clone().multiplyScalar(side);
-  const h = getHouseHeight(b);
-
-  const supportR = getSurfaceSupportRadius(dir, side, b.id);
-  const actualR = PLANET_RADIUS + side * Math.max(0, supportR - PLANET_RADIUS);
-  const houseCenter = dir.clone().multiplyScalar(actualR).addScaledVector(up, h * 0.5);
-
-  let tangent = new THREE.Vector3(0, 1, 0).cross(up);
-  if (tangent.lengthSq() < 1e-4) tangent.set(1, 0, 0).cross(up);
-  tangent.normalize();
-
-  const viewDist = Math.max(24, h * 1.4);
-  const targetPos = houseCenter.clone()
-    .addScaledVector(tangent, viewDist)
-    .addScaledVector(up, Math.max(4, h * 0.25));
-
-  velocity.set(0, 0, 0);
-  angularVelocityX = 0;
-  angularVelocityZ = 0;
-  player.position.copy(targetPos);
-  hasMovedFromOrigin = true;
-
-  const lookDir = houseCenter.clone().sub(targetPos).normalize();
-  const m = new THREE.Matrix4().lookAt(new THREE.Vector3(0, 0, 0), lookDir, up);
-  player.quaternion.setFromRotationMatrix(m);
-
-  statsModal.classList.remove('show');
-}
-
-function renderBuiltHouses(){
-  const myHouses = buildings.filter(b => b.owner === myPeerId);
-  builtCountEl.textContent = myHouses.length;
-  const totalStored = myHouses.reduce((acc, item) => acc + (item.storedTokens || 0), 0);
-  withdrawAllBtn.disabled = totalStored <= 0;
-
-  builtHousesList.innerHTML = '';
-  if (!myHouses.length){
-    builtHousesList.innerHTML = '<div style="color:#64748b">No houses built yet</div>';
-    return;
-  }
-    myHouses.forEach((b, i) => {
-    const row = document.createElement('div');
-    row.className = 'b-row';
-    const info = document.createElement('span');
-    info.appendChild(document.createTextNode(`#${i + 1} `));
-    const coordLink = document.createElement('span');
-    coordLink.textContent = `(${b.x}, ${b.y}, ${b.z})`;
-    coordLink.style.cssText = 'color:#38bdf8;text-decoration:underline;cursor:pointer;';
-    coordLink.addEventListener('click', () => teleportToBuilding(b));
-    info.appendChild(coordLink);
-    info.appendChild(document.createTextNode(` — stored: ${b.storedTokens || 0}`));
-    const btn = document.createElement('button');
-
-    btn.className = 'act-btn withdraw';
-    btn.textContent = 'Withdraw';
-    btn.disabled = (b.storedTokens || 0) <= 0;
-    btn.addEventListener('click', () => {
-      const amt = withdrawFromHouse(b, i);
-      if (amt > 0){
-        drawChart();
-        renderBuiltHouses();
-      }
-    });
-    row.appendChild(info);
-    row.appendChild(btn);
-    builtHousesList.appendChild(row);
-  });
-}
-
 maxTransferBtn.addEventListener('click', () => {
-  const maxAmt = Math.max(0, Number(tokens.toFixed(2)));
-  transferAmountInput.value = maxAmt;
+  transferAmountInput.value = Math.max(0, Number(tokens.toFixed(2)));
 });
 
 document.getElementById('sendTokensBtn').addEventListener('click', () => {
@@ -3059,12 +2038,10 @@ function refreshRecipientSelect(){
 function openStats(){
   refreshRecipientSelect();
   selectedExpenseIds.clear();
-
   syncTimeframeUI();
   statsModal.classList.add('show');
   drawChart();
   renderExpenseHistory();
-  renderBuiltHouses();
 }
 document.getElementById('tokenCounterDock').addEventListener('click', openStats);
 document.getElementById('closeStatsBtn').addEventListener('click', () => statsModal.classList.remove('show'));
@@ -3074,7 +2051,7 @@ document.getElementById('helpBtn').addEventListener('click', () => helpModal.cla
 document.getElementById('closeHelpBtn').addEventListener('click', () => helpModal.classList.remove('show'));
 
 /* =========================================================
-   FLIGHT PHYSICS
+   FLIGHT PHYSICS & HACK LOOP
    ========================================================= */
 let velocity = new THREE.Vector3(0, 0, 0);
 let angularVelocityX = 0;
@@ -3083,13 +2060,12 @@ const clock = new THREE.Clock();
 let elapsedTimeSec = 0;
 
 const OUTER_ZERO_GRAVITY_RADIUS = PLANET_RADIUS + 1200;
-/* [PERF OPT] Reusable gravity result vector */
 const _gravityVec = new THREE.Vector3();
-const _camBaseQuat = new THREE.Quaternion();
 const _camTargetQuat = new THREE.Quaternion();
 const _camLookDir = new THREE.Vector3();
 const _camSmoothDir = new THREE.Vector3(0, 0, -1);
 const _camForwardBase = new THREE.Vector3(0, 0, -1);
+
 function computeGravity(pos, inWater, outVec){
   const r = pos.length();
   if (r < 0.001 || r >= OUTER_ZERO_GRAVITY_RADIUS){
@@ -3109,7 +2085,6 @@ function applyPendulumSelfLeveling(hasControlInput, gravityVec){
   if (hasControlInput) return;
   if (gravityVec.lengthSq() < 1e-10) return;
 
-  /* [PERF OPT] No allocations — reuse tmp vectors */
   _tmpVec1.copy(gravityVec).normalize();
   _tmpVec2.copy(_tmpVec1).negate();
   _tmpVec3.set(0, 1, 0).applyQuaternion(player.quaternion).normalize();
@@ -3125,58 +2100,23 @@ function applyPendulumSelfLeveling(hasControlInput, gravityVec){
   angularVelocityZ *= 0.985;
 }
 
-function updateHoldActions(nowMs){
-  if (!isHoldingAttack || !holdMode) return;
-  const elapsed = nowMs - holdStartTime;
-
-  if (holdMode === 'build' && targetBuildingId){
-    const step = Math.floor(elapsed / 800);
-    if (step > lastDepositStep && tokens >= 1){
-      lastDepositStep = step;
-      recordTokenDelta(-1, 'Stock house', true);
-      const b = buildingById.get(targetBuildingId);
-      if (b){
-        b.storedTokens = (b.storedTokens || 0) + 1;
-        upsertBuildingMesh(b);
-        store.set('buildings', buildings);
-        publishMqtt({ type: 'BUILDING_BUILT', building: b });
-      }
-    }
-} else if (holdMode === 'hack' && targetBuildingId){
-    const warningMs = 1000;
-    if (elapsed >= warningMs){
-      const drainStep = Math.floor((elapsed - warningMs) / 600);      if (drainStep > lastDrainStep){
-        lastDrainStep = drainStep;
-        const b = buildingById.get(targetBuildingId);
-        if (b && (b.storedTokens || 0) > 0){
-          b.storedTokens -= 1;
-          upsertBuildingMesh(b);
-          store.set('buildings', buildings);
-          recordTokenDelta(1, 'House hack', false);
-          publishMqtt({ type: 'BUILDING_LOOTED', buildingId: b.id, amount: 1, by: myPeerId });
-        } else {
-          stopHoldAction();
-        }
-      }
-    }
-  } else if (holdMode === 'hack_peer' && targetPeerId){
-    const peerEntry = remotePeers.get(targetPeerId);
-if (!peerEntry || player.position.distanceToSquared(peerEntry.mesh.position) > 240 * 240){      stopHoldAction();
-      return;
-    }
-    const stealStep = Math.floor(elapsed / 850);
-    if (stealStep > lastDrainStep){
-      lastDrainStep = stealStep;
-      const targetName = peerEntry.label || targetPeerId;
-      recordTokenDelta(1, `Mid-flight hack ${targetName}`, false);
-      publishMqtt({ type: 'PEER_HACKED', target: targetName, targetSid: targetPeerId, attacker: myPeerId, amount: 1 });
-    }
+function updateHoldHackAction(nowMs){
+  if (!isHoldingHack || !targetPeerId || DEFAULT_MODE !== 'hack') return;
+  const peerEntry = remotePeers.get(targetPeerId);
+  if (!peerEntry || player.position.distanceToSquared(peerEntry.mesh.position) > 240 * 240){
+    stopHackAction();
+    return;
+  }
+  const elapsed = nowMs - hackStartTime;
+  const stealStep = Math.floor(elapsed / 850);
+  if (stealStep > lastStealStep){
+    lastStealStep = stealStep;
+    const targetName = peerEntry.label || targetPeerId;
+    recordTokenDelta(1, `Mid-flight hack ${targetName}`, false);
+    publishMqtt({ type: 'PEER_HACKED', target: targetName, targetSid: targetPeerId, attacker: myPeerId, amount: 1 });
   }
 }
 
-/* =========================================================
-   WIRE / SOLID — навсегда включён wireframe
-   ========================================================= */
 function applyWireframeMode(){
   scene.traverse(obj => {
     if (!obj.isMesh || !obj.material) return;
@@ -3188,29 +2128,17 @@ function applyWireframeMode(){
     });
   });
   scene.traverse(obj => {
-    if (obj.isLineSegments) obj.visible = false;
+    if (obj.isLineSegments && obj !== lockSquareMesh) obj.visible = false;
   });
 }
 
 applyWireframeMode();
-function updateConeLockIndicator(){
-  let lockedPos = null;
-  if (selectedReticleMode === 'hack'){
-    const peerId = findPeerInCone(120, 0.86);
-    if (peerId && remotePeers.has(peerId)){
-      lockedPos = remotePeers.get(peerId).mesh.position;
-    } else {
-      const b = findHackableBuildingInCone(120, 0.86);
-      if (b) lockedPos = _tmpVec2.set(b.x, b.y, b.z);
-    }
-  } else if (selectedReticleMode === 'attack'){
-    const peerId = findPeerInCone(120, 0.86);
-    if (peerId && remotePeers.has(peerId)){
-      lockedPos = remotePeers.get(peerId).mesh.position;
-    }
-  }
 
-  if (lockedPos && !isHoldingAttack){
+function updateConeLockIndicator(){
+  const peerId = findPeerInCone(120, 0.86);
+  const lockedPos = (peerId && remotePeers.has(peerId)) ? remotePeers.get(peerId).mesh.position : null;
+
+  if (lockedPos && !isHoldingHack){
     attackBtn.classList.add('locked');
     lockSquareMesh.visible = true;
     lockSquareMesh.position.copy(lockedPos);
@@ -3220,6 +2148,7 @@ function updateConeLockIndicator(){
     lockSquareMesh.visible = false;
   }
 }
+
 function animate(){
   requestAnimationFrame(animate);
   const dt = Math.min(0.05, clock.getDelta());
@@ -3228,53 +2157,45 @@ function animate(){
   updateDriftingExteriorLights(elapsedTimeSec);
 
   const nowMs = Date.now();
-
   const inWater = isInWaterLayer(player.position);
   let hasControlInput = false;
 
-  if (Date.now() >= frozenUntil){
-    if (keys['ArrowLeft']){ angularVelocityZ += TURN_SPEED; hasControlInput = true; }
-    if (keys['ArrowRight']){ angularVelocityZ -= TURN_SPEED; hasControlInput = true; }
-    if (keys['ArrowUp']){ angularVelocityX -= TURN_SPEED; hasControlInput = true; }
-    if (keys['ArrowDown']){ angularVelocityX += TURN_SPEED; hasControlInput = true; }
+  if (keys['ArrowLeft']){ angularVelocityZ += TURN_SPEED; hasControlInput = true; }
+  if (keys['ArrowRight']){ angularVelocityZ -= TURN_SPEED; hasControlInput = true; }
+  if (keys['ArrowUp']){ angularVelocityX -= TURN_SPEED; hasControlInput = true; }
+  if (keys['ArrowDown']){ angularVelocityX += TURN_SPEED; hasControlInput = true; }
 
-    if (touchJoystick.active && (Math.abs(touchJoystick.moveX) > 0.02 || Math.abs(touchJoystick.moveY) > 0.02)){
-      angularVelocityX += touchJoystick.moveY * TOUCH_TURN_SPEED;
-      angularVelocityZ -= touchJoystick.moveX * TOUCH_TURN_SPEED;
-      hasControlInput = true;
-    }
+  if (touchJoystick.active && (Math.abs(touchJoystick.moveX) > 0.02 || Math.abs(touchJoystick.moveY) > 0.02)){
+    angularVelocityX += touchJoystick.moveY * TOUCH_TURN_SPEED;
+    angularVelocityZ -= touchJoystick.moveX * TOUCH_TURN_SPEED;
+    hasControlInput = true;
+  }
 
-    angularVelocityX *= DAMPING_TURN;
-    angularVelocityZ *= DAMPING_TURN;
+  angularVelocityX *= DAMPING_TURN;
+  angularVelocityZ *= DAMPING_TURN;
 
-    /* [PERF OPT] No allocations — reuse _tmpEuler and _tmpQuat1 */
-    _tmpEuler.set(angularVelocityX, 0, angularVelocityZ);
-    _tmpQuat1.setFromEuler(_tmpEuler);
-    player.quaternion.multiply(_tmpQuat1);
+  _tmpEuler.set(angularVelocityX, 0, angularVelocityZ);
+  _tmpQuat1.setFromEuler(_tmpEuler);
+  player.quaternion.multiply(_tmpQuat1);
 
-    const thrustScale = inWater ? WATER_THRUST_FACTOR : 1.0;
-    let signedThrust = 0;
-    if (keys['Space']){
-      signedThrust = FLY_SPEED * (superThrust ? 2.0 : 1.0) * thrustScale;
-      hasControlInput = true;
-    } else if (keys['KeyB']){
-      signedThrust = -FLY_SPEED * (superThrust ? 2.0 : 1.0) * thrustScale;
-      hasControlInput = true;
-    } else if (Math.abs(currentThrottle) > 0.02){
-      signedThrust = FLY_SPEED * currentThrottle * thrustScale;
-      hasControlInput = true;
-    }
+  const thrustScale = inWater ? WATER_THRUST_FACTOR : 1.0;
+  let signedThrust = 0;
+  if (keys['Space']){
+    signedThrust = FLY_SPEED * (superThrust ? 2.0 : 1.0) * thrustScale;
+    hasControlInput = true;
+  } else if (keys['KeyB']){
+    signedThrust = -FLY_SPEED * (superThrust ? 2.0 : 1.0) * thrustScale;
+    hasControlInput = true;
+  } else if (Math.abs(currentThrottle) > 0.02){
+    signedThrust = FLY_SPEED * currentThrottle * thrustScale;
+    hasControlInput = true;
+  }
 
-    /* [PERF OPT] localUp reuse _tmpVec1 */
-    _tmpVec1.set(0, 1, 0).applyQuaternion(player.quaternion);
-    if (isReverseThrust) _tmpVec1.negate();
+  _tmpVec1.set(0, 1, 0).applyQuaternion(player.quaternion);
+  if (isReverseThrust) _tmpVec1.negate();
 
-    if (Math.abs(signedThrust) > 0){
-      velocity.addScaledVector(_tmpVec1, signedThrust);
-    }
-  } else {
-    angularVelocityX *= 0.85;
-    angularVelocityZ *= 0.85;
+  if (Math.abs(signedThrust) > 0){
+    velocity.addScaledVector(_tmpVec1, signedThrust);
   }
 
   computeGravity(player.position, inWater, _gravityVec);
@@ -3282,11 +2203,11 @@ function animate(){
   velocity.add(_gravityVec);
   velocity.multiplyScalar(inWater ? WATER_DAMPING_MOVE : DAMPING_MOVE);
   player.position.add(velocity);
-  if (!hasControlInput && Date.now() >= frozenUntil){
+
+  if (!hasControlInput){
     const rNow = player.position.length();
     const minFreeGap = 6.0;
     if (rNow > 0.001 && Math.abs(rNow - PLANET_RADIUS) < minFreeGap){
-      /* [PERF OPT] reuse _tmpVec2 */
       _tmpVec2.copy(player.position).divideScalar(rNow);
       const pushOut = rNow >= PLANET_RADIUS;
       const safeR = pushOut ? (PLANET_RADIUS + minFreeGap) : (PLANET_RADIUS - minFreeGap);
@@ -3302,10 +2223,6 @@ function animate(){
   }
   resolveSolidTerrainCollision(player.position, velocity, 0.5);
 
-  if (player.position.lengthSq() > 0.25){
-    hasMovedFromOrigin = true;
-  }
-
   player.updateMatrixWorld();
   camera.updateMatrixWorld();
   const camWorldPos = camera.getWorldPosition(_tmpVec4);
@@ -3319,7 +2236,8 @@ function animate(){
     player.position.y += dyg;
     player.position.z += dzg;
   }
-const speed = velocity.length();
+
+  const speed = velocity.length();
   if (speed > 0.05){
     _tmpQuat2.copy(player.quaternion).invert();
     _camLookDir.copy(velocity).divideScalar(speed).applyQuaternion(_tmpQuat2).normalize();
@@ -3332,31 +2250,29 @@ const speed = velocity.length();
   _camSmoothDir.lerp(_camLookDir, 1 - Math.exp(-6 * dt)).normalize();
   _camTargetQuat.setFromUnitVectors(_camForwardBase, _camSmoothDir);
   camera.quaternion.slerp(_camTargetQuat, 1 - Math.exp(-10 * dt));
+
   for (const item of animatedGyroParts){
     item.obj.rotation.z += item.speed;
   }
 
-let cooldownsChanged = false;
-for (let i = 0; i < routeRings.length; i++){
-  const ring = routeRings[i];
-  /* [PERF OPT] Use squared distance */
-  if (nowMs >= ring.cooldownUntil && player.position.distanceToSquared(ring.mesh.position) < 17 * 17){
-    ring.cooldownUntil = nowMs + RING_COOLDOWN_MS;
-    ring.mat.opacity = RING_FADED_OPACITY;
-    ring.needsFadeUpdate = true;
-    savedRingCooldowns[i] = ring.cooldownUntil;
-    cooldownsChanged = true;
-    recordTokenDelta(2, 'Route ring', false);
-  } 
-}
-if (cooldownsChanged){
-  store.set('ring_cooldowns', savedRingCooldowns);
-}
+  let cooldownsChanged = false;
+  for (let i = 0; i < routeRings.length; i++){
+    const ring = routeRings[i];
+    if (nowMs >= ring.cooldownUntil && player.position.distanceToSquared(ring.mesh.position) < 17 * 17){
+      ring.cooldownUntil = nowMs + RING_COOLDOWN_MS;
+      ring.mat.opacity = RING_FADED_OPACITY;
+      ring.needsFadeUpdate = true;
+      savedRingCooldowns[i] = ring.cooldownUntil;
+      cooldownsChanged = true;
+      recordTokenDelta(2, 'Route ring', false);
+    }
+  }
+  if (cooldownsChanged){
+    store.set('ring_cooldowns', savedRingCooldowns);
+  }
 
-
-updateRouteRingsFade(nowMs);
-  updateCentersInfluence(nowMs);
-  updateHoldActions(nowMs);
+  updateRouteRingsFade(nowMs);
+  updateHoldHackAction(nowMs);
   updatePlayerShellReflection(nowMs);
   updatePeerLabelsScreenPosition();
 
@@ -3366,7 +2282,7 @@ updateRouteRingsFade(nowMs);
     planet.mesh.rotation.x += planet.rotSpeed * 0.2;
   }
 
-updateConeLockIndicator();
+  updateConeLockIndicator();
   renderer.render(scene, camera);
 }
 
