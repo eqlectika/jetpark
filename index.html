@@ -2082,6 +2082,7 @@ function createBankAtCenter(){
   banks.unshift(bank);
   saveBanks();
   refreshBankMesh(bank);
+  routeAuthorFee(BANK_AUTHOR_FEE, 'bank_build');
   return bank;
 }
 
@@ -2089,7 +2090,6 @@ function growBank(bank){
   if (tokens < 1) return false;
   recordTokenDelta(-1, `Build ${bank.name}`, true);
   bank.tokens += 1;
-  routeAuthorFee(BANK_AUTHOR_FEE, 'bank_build');
   saveBanks();
   refreshBankMesh(bank);
   return true;
