@@ -398,14 +398,15 @@ canvas#statsChart:active{cursor:grabbing}
       </div>
     </div>
     <div class="hist-list" id="expenseHistoryList"></div>
+
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px">
-  <strong style="font-size:13px">Banks</strong>
-  <div style="display:flex;gap:6px">
-    <button class="act-btn secondary" id="selectAllBanksBtn">Select All</button>
-    <button class="act-btn danger" id="withdrawSelectedBanksBtn" disabled>Withdrawal Selected</button>
-  </div>
-</div>
-<div class="hist-list" id="banksList"></div>
+      <strong style="font-size:13px">Banks</strong>
+      <div style="display:flex;gap:6px">
+        <button class="act-btn secondary" id="selectAllBanksBtn">Select All</button>
+        <button class="act-btn danger" id="withdrawSelectedBanksBtn" disabled>Withdrawal Selected</button>
+      </div>
+    </div>
+    <div class="hist-list" id="banksList"></div>
   </div>
 </div>
 
@@ -424,7 +425,7 @@ canvas#statsChart:active{cursor:grabbing}
     <p><strong>Touch Controls:</strong> Drag up or down on the left half of the screen for throttle; drag on the right half to tilt.</p>
     <p><strong>Desktop Controls:</strong> Use Arrow keys (<code>←</code> <code>↑</code> <code>↓</code> <code>→</code>) or hold left mouse button and drag to tilt; hold <code>Space</code> for forward thrust (double-tap <code>Space</code> for boost) or <code>B</code> for reverse thrust.</p>
     <p><strong>Auto-Hack:</strong> Rings and nearby players inside your aim cone are collected automatically when in range.</p>
-    <p><strong>Build Banks:</strong> Drag the crosshair to reposition. Long-press it to build a bank at screen center (1 token per tick, 1 token fee to author). Tap it to switch mode: Sky / Flat / Cube.</p>
+    <p><strong>Build Banks:</strong> Drag the crosshair to reposition. Long-press it to build a bank at screen center (1 token per tick, 1 token fee to author on creation). Tap it to switch mode: Sky / Flat / Cube.</p>
     <p><strong>Free Flight &amp; Gravity:</strong> Fly in any direction indefinitely. Gravity is zero at the planet center and zero at the matching outer height.</p>
     <div class="help-footer-logo">
       <a href="./match.html" target="_blank" rel="noopener noreferrer" title="Telegram">
@@ -549,10 +550,55 @@ if (!store.get('initialized', false)){
   store.set('initialized', true);
 }
 
+const CANDLE_INTERVAL_MS = 5 * 60 * 1000; // 5 минут на одну свечу
+
 let tokens = Number(store.get('tokens', INITIAL_CAPITAL));
 if (!Number.isFinite(tokens)) tokens = INITIAL_CAPITAL;
-let tokenSeries = Array.isArray(store.get('token_series', null)) ? store.get('token_series', []) : [{ t: Date.now(), val: tokens }];
-if (!tokenSeries.length) tokenSeries = [{ t: Date.now(), val: tokens }];
+
+function normalizeCandleSeries(raw){
+  if (!Array.isArray(raw) || !raw.length){
+    const bucket = Math.floor(Date.now() / CANDLE_INTERVAL_MS) * CANDLE_INTERVAL_MS;
+    return [{ t: bucket, o: tokens, h: tokens, l: tokens, c: tokens }];
+  }
+  const map = new Map();
+  for (const item of raw){
+    if (!item || typeof item !== 'object') continue;
+    const ts = Number(item.t || Date.now());
+    const bucket = Math.floor(ts / CANDLE_INTERVAL_MS) * CANDLE_INTERVAL_MS;
+    if (Number.isFinite(item.o) && Number.isFinite(item.c)){
+      const prev = map.get(bucket);
+      if (!prev){
+        map.set(bucket, {
+          t: bucket,
+          o: item.o,
+          h: Number.isFinite(item.h) ? item.h : Math.max(item.o, item.c),
+          l: Number.isFinite(item.l) ? item.l : Math.min(item.o, item.c),
+          c: item.c
+        });
+      } else {
+        prev.h = Math.max(prev.h, item.h ?? item.c);
+        prev.l = Math.min(prev.l, item.l ?? item.c);
+        prev.c = item.c;
+      }
+    } else if (Number.isFinite(item.val)){
+      const prev = map.get(bucket);
+      if (!prev){
+        map.set(bucket, { t: bucket, o: item.val, h: item.val, l: item.val, c: item.val });
+      } else {
+        prev.h = Math.max(prev.h, item.val);
+        prev.l = Math.min(prev.l, item.val);
+        prev.c = item.val;
+      }
+    }
+  }
+  const sorted = Array.from(map.values()).sort((a, b) => a.t - b.t);
+  return sorted.length ? sorted : [{
+    t: Math.floor(Date.now() / CANDLE_INTERVAL_MS) * CANDLE_INTERVAL_MS,
+    o: tokens, h: tokens, l: tokens, c: tokens
+  }];
+}
+
+let tokenSeries = normalizeCandleSeries(store.get('token_series', null));
 let expenseHistory = Array.isArray(store.get('expense_history', null)) ? store.get('expense_history', []) : [];
 let selectedExpenseIds = new Set();
 let selectedTimeframe = store.get('chart_timeframe', 'day');
@@ -560,6 +606,7 @@ if (!['day', 'week', 'month', 'all'].includes(selectedTimeframe)) selectedTimefr
 
 let banks = Array.isArray(store.get('banks', null)) ? store.get('banks', []) : [];
 let bankArchCounters = store.get('bank_arch_counters', {}) || {};
+
 
 function normalizeExpenseHistory(list){
   if (!Array.isArray(list)) return [];
@@ -585,28 +632,54 @@ function saveBanks(){
   store.set('bank_arch_counters', bankArchCounters);
 }
 
-function recordTokenDelta(delta, reason, isExpense = false){
+function updateCandleBucket(newBalance, nowMs = Date.now()){
+  const bucket = Math.floor(nowMs / CANDLE_INTERVAL_MS) * CANDLE_INTERVAL_MS;
+  const last = tokenSeries[tokenSeries.length - 1];
+  if (!last){
+    tokenSeries.push({ t: bucket, o: newBalance, h: newBalance, l: newBalance, c: newBalance });
+    return;
+  }
+  if (last.t === bucket){
+    last.h = Math.max(last.h, newBalance);
+    last.l = Math.min(last.l, newBalance);
+    last.c = newBalance;
+  } else if (bucket > last.t){
+    const openVal = last.c;
+    tokenSeries.push({
+      t: bucket,
+      o: openVal,
+      h: Math.max(openVal, newBalance),
+      l: Math.min(openVal, newBalance),
+      c: newBalance
+    });
+  }
+}
+
+function appendExpenseEntry(signedAmt, reasonLabel){
+  const absAmt = Number(Math.abs(signedAmt).toFixed(2));
+  if (absAmt <= 0) return;
+  expenseHistory.unshift({
+    id: 'exp_' + Date.now() + '_' + Math.random().toString(16).slice(2, 6),
+    reason: reasonLabel,
+    amount: absAmt,
+    direction: signedAmt >= 0 ? 'in' : 'out',
+    ts: Date.now()
+  });
+  expenseHistory = normalizeExpenseHistory(expenseHistory);
+}
+
+function recordTokenDelta(delta, reason, isExpense = false, skipHistoryLog = false){
   const numDelta = Number(delta);
-  if (!Number.isFinite(numDelta)) return;
+  if (!Number.isFinite(numDelta)) return 0;
   const prevTokens = tokens;
   tokens = Math.max(0, Number((tokens + numDelta).toFixed(2)));
   const actualDelta = Number((tokens - prevTokens).toFixed(2));
-  tokenSeries.push({ t: Date.now(), val: tokens });
+  updateCandleBucket(tokens, Date.now());
   const reasonLabel = reason || (actualDelta >= 0 ? 'Incoming' : 'Expense');
 
-  if (actualDelta !== 0 || isExpense){
+  if (!skipHistoryLog && (actualDelta !== 0 || isExpense)){
     const signedAmt = actualDelta !== 0 ? actualDelta : (isExpense ? -Math.abs(numDelta) : numDelta);
-    const absAmt = Number(Math.abs(signedAmt).toFixed(2));
-    if (absAmt > 0){
-      expenseHistory.unshift({
-        id: 'exp_' + Date.now() + '_' + Math.random().toString(16).slice(2, 6),
-        reason: reasonLabel,
-        amount: absAmt,
-        direction: signedAmt >= 0 ? 'in' : 'out',
-        ts: Date.now()
-      });
-      expenseHistory = normalizeExpenseHistory(expenseHistory);
-    }
+    appendExpenseEntry(signedAmt, reasonLabel);
   }
   saveEconomy();
 
@@ -616,7 +689,9 @@ function recordTokenDelta(delta, reason, isExpense = false){
     renderExpenseHistory();
     if (typeof renderBanksTable === 'function') renderBanksTable();
   }
+  return actualDelta;
 }
+
 
 function routeAuthorFee(amount, source){
   const numAmt = Number(amount);
@@ -747,7 +822,6 @@ const outDir = new THREE.Vector3(0.7071, 0.7071, 0).normalize();
 // Старт снаружи, на внешней поверхности воды
 const startRadius = PLANET_RADIUS + WATER_OUTER_OFFSET + 2.0; // +2 — зазор над водой
 player.position.copy(outDir).multiplyScalar(startRadius);
-
 
 const upOutward = outDir.clone(); // уже единичный
 player.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), upOutward);
@@ -1708,10 +1782,12 @@ peerIdInput.addEventListener('blur', () => {
 });
 
 window.addEventListener('pagehide', () => {
+  stopBankBuilding();
   applyPeerIdInput(false);
   store.set('peer_id', myPeerId);
   saveEconomy();
 });
+
 
 /* =========================================================
    KEYBOARD
@@ -1960,7 +2036,20 @@ function applyBankShape(group, bank){
   const t = Math.max(1, bank.tokens);
   const color = bank.color;
 
+  // Сброс масштаба и позиции
+  body.scale.set(1, 1, 1);
+  body.position.set(0, 0, 0);
+  edges.scale.set(1, 1, 1);
+  edges.position.set(0, 0, 0);
+
   if (bank.mode === 'sky'){
+    // Восстановить бокс, если был цилиндр
+    if (!body.geometry.parameters || body.geometry.type !== 'BoxGeometry'){
+      body.geometry.dispose();
+      body.geometry = new THREE.BoxGeometry(1, 1, 1);
+      edges.geometry.dispose();
+      edges.geometry = new THREE.EdgesGeometry(body.geometry);
+    }
     const h = t;
     const w = 1;
     body.scale.set(w, h, w);
@@ -1977,6 +2066,13 @@ function applyBankShape(group, bank){
     body.position.set(0, h * 0.5, 0);
     edges.position.copy(body.position);
   } else {
+    // Восстановить бокс, если был цилиндр
+    if (!body.geometry.parameters || body.geometry.type !== 'BoxGeometry'){
+      body.geometry.dispose();
+      body.geometry = new THREE.BoxGeometry(1, 1, 1);
+      edges.geometry.dispose();
+      edges.geometry = new THREE.EdgesGeometry(body.geometry);
+    }
     const s = Math.cbrt(t);
     body.scale.set(s, s, s);
     body.position.set(0, s * 0.5, 0);
@@ -1987,23 +2083,36 @@ function applyBankShape(group, bank){
   edges.material.color.setHex(color);
 }
 
+function disposeBankMesh(group){
+  group.traverse(obj => {
+    if (obj.geometry) obj.geometry.dispose();
+    if (obj.material){
+      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      mats.forEach(m => {
+        if (m.map) m.map.dispose();
+        m.dispose();
+      });
+    }
+  });
+}
+
 function refreshBankMesh(bank){
   let group = bankMeshes.get(bank.id);
   if (group){
-    // Remove old ornament and label; rebuild
     if (group.userData.ornament){
       group.remove(group.userData.ornament);
+      disposeBankMesh(group.userData.ornament);
       group.userData.ornament = null;
     }
     if (group.userData.labelSprite){
       group.remove(group.userData.labelSprite);
+      disposeBankMesh(group.userData.labelSprite);
       group.userData.labelSprite = null;
     }
     applyBankShape(group, bank);
 
     const orn = new THREE.Group();
     addArchAccentToParent(orn, bank.arch, 0, 0.12, bank.color, false);
-    // Push ornament to top of body
     const body = group.children[0];
     const topY = body.position.y + (body.geometry.type === 'CylinderGeometry' ? 0.5 : (body.scale.y * 0.5));
     orn.position.set(0, topY, 0);
@@ -2026,15 +2135,12 @@ function createBankAtCenter(){
   const origin = camera.getWorldPosition(new THREE.Vector3());
   const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.getWorldQuaternion(new THREE.Quaternion())).normalize();
 
-  // Ray-sphere: find intersection with planet surface
   const playerR = player.position.length();
   const fromInside = playerR < PLANET_RADIUS;
 
-  // Approx: walk along ray until radius crosses terrain
   let hitR = PLANET_RADIUS;
   let hitDir = dir.clone();
-  let prevR = origin.length();
-  let prevInside = prevR < PLANET_RADIUS;
+  let prevInside = origin.length() < PLANET_RADIUS;
 
   const maxSteps = 200;
   const step = 20;
@@ -2043,7 +2149,6 @@ function createBankAtCenter(){
     const r = p.length();
     const inside = r < PLANET_RADIUS;
     if (inside !== prevInside){
-      // binary refine
       let a = origin.clone().addScaledVector(dir, step * (i - 1));
       let b = p;
       for (let k = 0; k < 20; k++){
@@ -2056,7 +2161,6 @@ function createBankAtCenter(){
       hitDir = hit.clone().normalize();
       break;
     }
-    prevR = r;
     prevInside = inside;
   }
 
@@ -2067,16 +2171,12 @@ function createBankAtCenter(){
   const side = fromInside ? -1 : 1;
   const surfDir = hitDir.clone();
 
-  // Nearest architecture
   const archObj = nearestArchForDir(surfDir);
   const archName = archObj.spec.arch;
 
-  // Per-architecture counter
   const currentCount = Number(bankArchCounters[archName] || 0) + 1;
   bankArchCounters[archName] = currentCount;
   const displayName = `${archName.charAt(0).toUpperCase() + archName.slice(1)}-${currentCount}`;
-
-  // Color: pick from palette by index
   const color = linePalette[(currentCount - 1) % linePalette.length];
 
   const bank = {
@@ -2100,9 +2200,31 @@ function createBankAtCenter(){
   return bank;
 }
 
+let buildSession = null; // { bank, spent, ticks }
+
+function flushBuildSession(){
+  if (!buildSession) return;
+  const { bank, spent, ticks } = buildSession;
+  buildSession = null;
+  if (spent > 0){
+    const label = ticks > 1 ? `Build ${bank.name} (${ticks} ticks)` : `Build ${bank.name}`;
+    appendExpenseEntry(-spent, label);
+    saveEconomy();
+    if (typeof statsModal !== 'undefined' && statsModal && statsModal.classList.contains('show')){
+      renderExpenseHistory();
+    }
+  }
+}
+
 function growBank(bank){
   if (tokens < 1) return false;
-  recordTokenDelta(-1, `Build ${bank.name}`, true);
+  const actualDelta = recordTokenDelta(-1, `Build ${bank.name}`, true, true);
+  const spentNow = Math.abs(actualDelta);
+  if (spentNow <= 0) return false;
+  if (buildSession && buildSession.bank.id === bank.id){
+    buildSession.spent = Number((buildSession.spent + spentNow).toFixed(2));
+    buildSession.ticks += 1;
+  }
   bank.tokens += 1;
   saveBanks();
   refreshBankMesh(bank);
@@ -2119,8 +2241,10 @@ let bankBtnDrag = { active: false, ox: 0, oy: 0 };
 
 function startBankBuilding(){
   if (buildingBank) return;
-  buildingBank = createBankAtCenter();
-  if (!buildingBank) return;
+  const created = createBankAtCenter();
+  if (!created) return;
+  buildingBank = created;
+  buildSession = { bank: created, spent: 0, ticks: 0 };
   attackBtn.classList.add('active');
   if (buildingBank.tokens < 1) growBank(buildingBank);
   bankTickTimer = setInterval(() => {
@@ -2138,9 +2262,11 @@ function stopBankBuilding(){
     clearInterval(bankTickTimer);
     bankTickTimer = null;
   }
+  flushBuildSession();
   buildingBank = null;
   attackBtn.classList.remove('active');
 }
+
 
 function openBuildMenu(){
   const r = reticleWrapEl.getBoundingClientRect();
@@ -2214,7 +2340,6 @@ function onAttackBtnRelease(e){
     return;
   }
   if (!bankPressMoved){
-    // Tap: open/close build menu
     if (buildMenu.classList.contains('show')) closeBuildMenu();
     else openBuildMenu();
   } else {
@@ -2230,16 +2355,12 @@ document.addEventListener('pointerdown', (e) => {
   }
 }, true);
 
-/* Animate banks: rotate owner label horizontally + spin gyro inside ornament */
 function updateBanksAnimation(nowSec){
   for (const group of bankMeshes.values()){
     const sprite = group.userData.labelSprite;
     if (sprite){
-      // Billboard-style rotation around vertical axis
-      sprite.material.rotation = 0;
       const camDir = camera.position.clone().sub(group.position);
       const angle = Math.atan2(camDir.x, camDir.z);
-      sprite.position.x = Math.sin(nowSec * 0.8) * 0.001;
       sprite.material.rotation = angle;
     }
     const orn = group.userData.ornament;
@@ -2249,7 +2370,6 @@ function updateBanksAnimation(nowSec){
   }
 }
 
-/* Rebuild all banks on startup */
 function rebuildAllBanks(){
   for (const bank of banks){
     refreshBankMesh(bank);
@@ -2290,7 +2410,10 @@ timeframeBar.querySelectorAll('.tf-btn').forEach(btn => {
 });
 
 function getFilteredSeries(){
-  const base = tokenSeries.length ? tokenSeries : [{ t: Date.now(), val: tokens }];
+  const nowBucket = Math.floor(Date.now() / CANDLE_INTERVAL_MS) * CANDLE_INTERVAL_MS;
+  const base = tokenSeries.length
+    ? tokenSeries
+    : [{ t: nowBucket, o: tokens, h: tokens, l: tokens, c: tokens }];
   if (selectedTimeframe === 'all') return base;
   const now = Date.now();
   const msMap = {
@@ -2302,6 +2425,7 @@ function getFilteredSeries(){
   const filtered = base.filter(p => (p.t || now) >= cutoff);
   return filtered.length ? filtered : [base[base.length - 1]];
 }
+
 
 let chartScrollDrag = { active: false, lastY: 0 };
 statsChartEl.addEventListener('pointerdown', (e) => {
@@ -2341,27 +2465,75 @@ function drawChart(){
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssW, cssH);
 
-  const pts = getFilteredSeries();
-  const maxV = Math.max(10, ...pts.map(p => p.val));
-  const minV = Math.min(0, ...pts.map(p => p.val));
+  const candles = getFilteredSeries();
+  const highs = candles.map(c => Number.isFinite(c.h) ? c.h : (c.c ?? c.val ?? tokens));
+  const lows = candles.map(c => Number.isFinite(c.l) ? c.l : (c.c ?? c.val ?? tokens));
+  const maxV = Math.max(10, ...highs);
+  const minV = Math.min(0, ...lows);
   const span = Math.max(1, maxV - minV);
 
-  ctx.strokeStyle = '#38bdf8';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  pts.forEach((p, idx) => {
-    const x = pts.length === 1 ? cssW / 2 : (idx / (pts.length - 1)) * (cssW - 36) + 18;
-    const y = cssH - 20 - ((p.val - minV) / span) * (cssH - 40);
-    if (idx === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+  const padL = 16;
+  const padR = 16;
+  const padT = 26;
+  const padB = 14;
+  const plotW = Math.max(10, cssW - padL - padR);
+  const plotH = Math.max(10, cssH - padT - padB);
+
+  const valToY = (v) => padT + plotH - ((v - minV) / span) * plotH;
+
+  const candleColor = '#38bdf8';
+  const bgFill = '#070a14';
+  const count = candles.length;
+  const slotW = plotW / Math.max(count, 1);
+  const bodyW = Math.max(4, Math.min(18, slotW * 0.62));
+
+  candles.forEach((c, idx) => {
+    const o = Number.isFinite(c.o) ? c.o : (c.val ?? tokens);
+    const cl = Number.isFinite(c.c) ? c.c : o;
+    const h = Number.isFinite(c.h) ? c.h : Math.max(o, cl);
+    const l = Number.isFinite(c.l) ? c.l : Math.min(o, cl);
+
+    const cx = count === 1
+      ? padL + plotW * 0.5
+      : padL + slotW * (idx + 0.5);
+
+    const yH = valToY(h);
+    const yL = valToY(l);
+    const yO = valToY(o);
+    const yC = valToY(cl);
+
+    const isPositive = cl >= o;
+    const bodyTop = Math.min(yO, yC);
+    const bodyH = Math.max(2, Math.abs(yC - yO));
+    const halfW = bodyW * 0.5;
+
+    // Тень свечи (High - Low)
+    ctx.strokeStyle = candleColor;
+    ctx.lineWidth = 1.25;
+    ctx.beginPath();
+    ctx.moveTo(cx, yH);
+    ctx.lineTo(cx, yL);
+    ctx.stroke();
+
+    // Тело свечи: залитое в плюс, полое в минус
+    if (isPositive){
+      ctx.fillStyle = candleColor;
+      ctx.fillRect(cx - halfW, bodyTop, bodyW, bodyH);
+    } else {
+      ctx.fillStyle = bgFill;
+      ctx.fillRect(cx - halfW, bodyTop, bodyW, bodyH);
+      ctx.strokeStyle = candleColor;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(cx - halfW, bodyTop, bodyW, bodyH);
+    }
   });
-  ctx.stroke();
 
   ctx.fillStyle = '#94a3b8';
   ctx.font = `12px ${CANVAS_FONT_STACK}`;
-  ctx.fillText(`[${selectedTimeframe.toUpperCase()}] Balance: ${tokens.toFixed(1)} | Peak: ${maxV.toFixed(1)}`, 14, 18);
+  ctx.fillText(`[${selectedTimeframe.toUpperCase()} · 5m] Balance: ${tokens.toFixed(1)} | Peak: ${maxV.toFixed(1)}`, 14, 17);
   ctx.restore();
 }
+
 
 function syncDeleteButtonState(){
   deleteSelectedHistBtn.disabled = selectedExpenseIds.size === 0;
@@ -2441,13 +2613,14 @@ document.getElementById('sendTokensBtn').addEventListener('click', () => {
   drawChart();
   renderExpenseHistory();
 });
+
+/* ---- BANKS TABLE ---- */
 const banksListEl = document.getElementById('banksList');
 const selectAllBanksBtn = document.getElementById('selectAllBanksBtn');
 const withdrawSelectedBanksBtn = document.getElementById('withdrawSelectedBanksBtn');
 let selectedBankIds = new Set();
 
 function syncBanksButtonsState(){
-  // Только свои банки можно выбирать
   const ownBanks = banks.filter(b => b.owner === myPeerId);
   withdrawSelectedBanksBtn.disabled = selectedBankIds.size === 0;
   selectAllBanksBtn.textContent =
@@ -2465,7 +2638,12 @@ function renderBanksTable(){
     return;
   }
 
-  // Уже в порядке: вверху последние (banks.unshift при создании)
+  // Убираем из выбора ID, которых больше нет
+  const existingIds = new Set(banks.map(b => b.id));
+  for (const id of Array.from(selectedBankIds)){
+    if (!existingIds.has(id)) selectedBankIds.delete(id);
+  }
+
   banks.forEach((bank) => {
     const isMine = bank.owner === myPeerId;
     const row = document.createElement('div');
@@ -2523,34 +2701,54 @@ selectAllBanksBtn.addEventListener('click', () => {
 
 withdrawSelectedBanksBtn.addEventListener('click', () => {
   if (!selectedBankIds.size) return;
+
   let totalWithdrawn = 0;
   const toRemove = [];
+  const archDecrements = {};
+
   for (const bank of banks){
     if (selectedBankIds.has(bank.id) && bank.owner === myPeerId){
       totalWithdrawn += bank.tokens;
       toRemove.push(bank.id);
+      archDecrements[bank.arch] = (archDecrements[bank.arch] || 0) + 1;
     }
   }
+
   if (totalWithdrawn <= 0){
     selectedBankIds.clear();
     renderBanksTable();
     return;
   }
+
   // Вернуть токены на баланс
   recordTokenDelta(totalWithdrawn, 'Withdrawal', false);
-  // Удалить банки и их меши
+
+  // Удалить меши с освобождением ресурсов
   for (const id of toRemove){
     const mesh = bankMeshes.get(id);
     if (mesh){
+      disposeBankMesh(mesh);
       banksGroup.remove(mesh);
       bankMeshes.delete(id);
     }
   }
+
+  // Удалить банки из массива
   banks = banks.filter(b => !toRemove.includes(b.id));
+
+  // Откатить счётчики архитектур (номер не переиспользуется, но счётчик уменьшается,
+  // чтобы следующий банк той же архитектуры не прыгал через номера)
+  for (const arch in archDecrements){
+    if (bankArchCounters[arch] !== undefined){
+      bankArchCounters[arch] = Math.max(0, Number(bankArchCounters[arch]) - archDecrements[arch]);
+    }
+  }
+
   selectedBankIds.clear();
   saveBanks();
   renderBanksTable();
 });
+
 function refreshRecipientSelect(){
   const prevVal = recipientSelect.value;
   recipientSelect.innerHTML = '';
