@@ -66,45 +66,6 @@ canvas{
 #peerIdInput:focus{border-bottom-color:#38bdf8;color:#fff}
 #peerIdInput.saved{color:#a3e635 !important;border-bottom-color:#a3e635 !important}
 
-#reticleWrap{
-  position:fixed;right:24px;bottom:84px;z-index:45;
-  touch-action:none;
-}
-#reticleModeTag{
-  position:absolute;
-  left:50%;
-  bottom:calc(100% + 2px);
-  transform:translateX(-50%);
-  padding:1px 6px;
-  border-radius:4px;
-  font-size:10px;
-  font-weight:700;
-  letter-spacing:.5px;
-  line-height:1.25;
-  text-transform:uppercase;
-  color:#7dd3fc;
-  background:rgba(10,14,26,.78);
-  border:1px solid rgba(56,189,248,.55);
-  white-space:nowrap;
-  pointer-events:none;
-  user-select:none;
-}
-#attackBtn{
-  width:56px;height:56px;
-  background:transparent;border:none;
-  color:rgba(255,255,255,.88);
-  display:flex;align-items:center;justify-content:center;
-  cursor:grab;touch-action:none;
-}
-#attackBtn.locked{
-  color:#38bdf8;
-  filter:drop-shadow(0 0 6px rgba(56,189,248,.85));
-}
-#attackBtn.active{
-  color:#7dd3fc;
-  filter:drop-shadow(0 0 6px rgba(56,189,248,.75));
-}
-
 .bottom-bar{
   position:fixed;left:10px;right:10px;bottom:max(8px,env(safe-area-inset-bottom));z-index:40;
   display:flex;align-items:center;justify-content:space-between;gap:8px;pointer-events:none;
@@ -315,19 +276,6 @@ canvas#statsChart:active{cursor:grabbing}
 <div id="throttleArea"></div>
 <div id="controlArea"></div>
 
-<div id="reticleWrap">
-  <div id="reticleModeTag" aria-hidden="true">HACK</div>
-  <div id="attackBtn" title="Drag the crosshair to aim. Long-press (or press F) to hack.">
-    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
-      <line x1="18" y1="3" x2="18" y2="13" stroke="currentColor" stroke-width="2"/>
-      <line x1="18" y1="23" x2="18" y2="33" stroke="currentColor" stroke-width="2"/>
-      <line x1="3" y1="18" x2="13" y2="18" stroke="currentColor" stroke-width="2"/>
-      <line x1="23" y1="18" x2="33" y2="18" stroke="currentColor" stroke-width="2"/>
-      <circle cx="18" cy="18" r="2.2" fill="currentColor"/>
-    </svg>
-  </div>
-</div>
-
 <div id="peerLabelsLayer"></div>
 
 <div id="chatFeed"></div>
@@ -391,7 +339,7 @@ canvas#statsChart:active{cursor:grabbing}
 
     <p><strong>Touch Controls:</strong> Drag up or down on the left half of the screen for throttle; drag on the right half to tilt.</p>
     <p><strong>Desktop Controls:</strong> Use Arrow keys (<code>←</code> <code>↑</code> <code>↓</code> <code>→</code>) or hold left mouse button and drag to tilt; hold <code>Space</code> for forward thrust (double-tap <code>Space</code> for boost) or <code>B</code> for reverse thrust.</p>
-    <p><strong>Reticle &amp; Hack:</strong> Drag the crosshair to aim, and <strong>long-press</strong> the crosshair (or hold <code>F</code>) to hack nearby players mid-flight.</p>
+    <p><strong>Auto-Hack:</strong> Rings and nearby players inside your aim cone are collected automatically when in range.</p>
     <p><strong>Free Flight &amp; Gravity:</strong> Fly in any direction indefinitely. Gravity is zero at the planet center and zero at the matching outer height.</p>
     <p><strong>Rings &amp; Hacking:</strong> Fly through the rings to collect tokens and hack nearby players to extract tokens.</p>
     <div class="help-footer-logo">
@@ -454,7 +402,12 @@ const WATER_DAMPING_MOVE = 0.945;
 const RING_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const RING_ACTIVE_OPACITY = 0.9;
 const RING_FADED_OPACITY = 0.14;
-const LONG_PRESS_MS = 450;
+
+const AUTO_HACK_INTERVAL = 850;
+const AUTO_PEER_RANGE = 300;
+const AUTO_PEER_COS = 0.86;
+const AUTO_RING_RANGE = 450;
+const AUTO_RING_COS = 0.88;
 
 const _tmpVec1 = new THREE.Vector3();
 const _tmpVec2 = new THREE.Vector3();
@@ -591,8 +544,6 @@ const tokenBalanceEl = document.getElementById('tokenBalanceEl');
 tokenBalanceEl.textContent = Number.isInteger(tokens) ? tokens : tokens.toFixed(1);
 const chatFeed = document.getElementById('chatFeed');
 const chatInput = document.getElementById('chatInput');
-const attackBtn = document.getElementById('attackBtn');
-const reticleWrapEl = document.getElementById('reticleWrap');
 const peerLabelsLayer = document.getElementById('peerLabelsLayer');
 const startButtonEl = document.getElementById('startButton');
 
@@ -625,7 +576,6 @@ startButtonEl.addEventListener('click', () => {
 
 let currentThrottle = 0;
 let touchJoystick = { active: false, startX: 0, startY: 0, moveX: 0, moveY: 0 };
-const isReverseThrust = false;
 
 const throttleArea = document.getElementById('throttleArea');
 const controlArea = document.getElementById('controlArea');
@@ -1201,30 +1151,6 @@ sixDirections.forEach((_, dirIndex) => {
 
 const centerObjects = [];
 const animatedGyroParts = [];
-const _squareHalf = 4.6;
-const _squarePoints = [
-  new THREE.Vector3(-_squareHalf, _squareHalf, 0),
-  new THREE.Vector3(_squareHalf, _squareHalf, 0),
-  new THREE.Vector3(_squareHalf, -_squareHalf, 0),
-  new THREE.Vector3(-_squareHalf, -_squareHalf, 0)
-];
-const _squareGeo = new THREE.BufferGeometry().setFromPoints([
-  _squarePoints[0], _squarePoints[1],
-  _squarePoints[1], _squarePoints[2],
-  _squarePoints[2], _squarePoints[3],
-  _squarePoints[3], _squarePoints[0]
-]);
-const lockSquareMesh = new THREE.LineSegments(
-  _squareGeo,
-  new THREE.LineBasicMaterial({
-    color: 0x38bdf8,
-    transparent: true,
-    opacity: 0.95,
-    depthTest: false
-  })
-);
-lockSquareMesh.visible = false;
-scene.add(lockSquareMesh);
 
 const sharedArchMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.55, metalness: 0.35, wireframe: true });
 const sharedAccentMat = new THREE.LineBasicMaterial({ color: 0xffffff });
@@ -1681,10 +1607,8 @@ window.addEventListener('pagehide', () => {
 });
 
 /* =========================================================
-   RETICLE (HACK ONLY BY DEFAULT)
+   KEYBOARD
    ========================================================= */
-const DEFAULT_MODE = 'hack';
-
 const keys = {};
 let lastSpaceTime = 0;
 let superThrust = false;
@@ -1696,13 +1620,11 @@ window.addEventListener('keydown', (e) => {
     if (now - lastSpaceTime < 250) superThrust = true;
     lastSpaceTime = now;
   }
-  if (e.code === 'KeyF' && !keys['KeyF']) startHackAction();
   keys[e.code] = true;
 });
 window.addEventListener('keyup', (e) => {
   keys[e.code] = false;
   if (e.code === 'Space') superThrust = false;
-  if (e.code === 'KeyF') stopHackAction();
 });
 
 let mouseDragging = false, lastMouseX = 0, lastMouseY = 0;
@@ -1720,20 +1642,9 @@ window.addEventListener('mouseup', () => {
   if (mouseDragging){ mouseDragging = false; touchJoystick.active = false; touchJoystick.moveX = 0; touchJoystick.moveY = 0; }
 });
 
-let isHoldingHack = false;
-let hackStartTime = 0;
-let targetPeerId = null;
-let lastStealStep = 0;
-let longPressTimer = null;
-let btnDrag = { active: false, moved: false, ox: 0, oy: 0, sx: 0, sy: 0 };
-
-function clearLongPressTimer(){
-  if (longPressTimer !== null){
-    clearTimeout(longPressTimer);
-    longPressTimer = null;
-  }
-}
-
+/* =========================================================
+   TARGETING (cone-based)
+   ========================================================= */
 function findPeerInCone(maxRange = 300, minCosAngle = 0.65){
   camera.updateMatrixWorld();
   const origin = camera.getWorldPosition(_tmpVec4);
@@ -1790,7 +1701,7 @@ function findRingInCone(maxRange = 450, minCosAngle = 0.88, nowMs = Date.now()){
   }
   return bestIdx;
 }
-  
+
 function triggerRingCaptureByIndex(idx, nowMs = Date.now()){
   if (idx < 0 || idx >= routeRings.length) return false;
   const ring = routeRings[idx];
@@ -1804,78 +1715,38 @@ function triggerRingCaptureByIndex(idx, nowMs = Date.now()){
   recordTokenDelta(2, 'Route ring', false);
   return true;
 }
-function startHackAction(){
-  if (isHoldingHack) return;
-  const nearPeer = findPeerInCone(300, 0.86);
-  if (!nearPeer){
-    const ringIdx = findRingInCone(450, 0.88, performance.now() + (Date.now() - performance.now()));
-    if (ringIdx !== -1){
-      triggerRingCaptureByIndex(ringIdx, Date.now());
+
+/* =========================================================
+   AUTO-HACK
+   ========================================================= */
+let lastAutoHackMs = 0;
+
+function updateAutoHack(nowMs){
+  if (nowMs - lastAutoHackMs < AUTO_HACK_INTERVAL) return;
+
+  const peerId = findPeerInCone(AUTO_PEER_RANGE, AUTO_PEER_COS);
+  if (peerId){
+    const entry = remotePeers.get(peerId);
+    if (entry){
+      lastAutoHackMs = nowMs;
+      recordTokenDelta(1, `Auto-hack ${entry.label || peerId}`, false);
+      publishMqtt({
+        type: 'PEER_HACKED',
+        target: entry.label,
+        targetSid: peerId,
+        attacker: myPeerId,
+        amount: 1
+      });
     }
     return;
   }
-  targetPeerId = nearPeer;
-  lastStealStep = 0;
-  isHoldingHack = true;
-  hackStartTime = performance.now();
-  attackBtn.classList.add('active');
-  publishMqtt({ type: 'PEER_HACK_ALERT', target: nearPeer, attacker: myPeerId });
-}
 
-function stopHackAction(){
-  clearLongPressTimer();
-  if (!isHoldingHack) return;
-  isHoldingHack = false;
-  attackBtn.classList.remove('active');
-  targetPeerId = null;
-}
-
-attackBtn.addEventListener('pointerdown', (e) => {
-  e.stopPropagation();
-  e.preventDefault();
-  attackBtn.setPointerCapture(e.pointerId);
-  const r = attackBtn.getBoundingClientRect();
-  btnDrag = {
-    active: true,
-    moved: false,
-    ox: e.clientX - r.left,
-    oy: e.clientY - r.top,
-    sx: e.clientX,
-    sy: e.clientY
-  };
-  clearLongPressTimer();
-  longPressTimer = setTimeout(() => {
-    if (btnDrag.active && !btnDrag.moved){
-      startHackAction();
-    }
-  }, LONG_PRESS_MS);
-});
-
-attackBtn.addEventListener('pointermove', (e) => {
-  if (!btnDrag.active) return;
-  if (Math.hypot(e.clientX - btnDrag.sx, e.clientY - btnDrag.sy) > 8){
-    btnDrag.moved = true;
-    clearLongPressTimer();
+  const ringIdx = findRingInCone(AUTO_RING_RANGE, AUTO_RING_COS, nowMs);
+  if (ringIdx !== -1){
+    lastAutoHackMs = nowMs;
+    triggerRingCaptureByIndex(ringIdx, nowMs);
   }
-  if (btnDrag.moved){
-    const nx = Math.max(8, Math.min(window.innerWidth - 64, e.clientX - btnDrag.ox));
-    const ny = Math.max(66, Math.min(window.innerHeight - 104, e.clientY - btnDrag.oy));
-    reticleWrapEl.style.left = nx + 'px';
-    reticleWrapEl.style.top = ny + 'px';
-    reticleWrapEl.style.right = 'auto';
-    reticleWrapEl.style.bottom = 'auto';
-  }
-});
-
-const onReticleRelease = (e) => {
-  if (e) e.stopPropagation();
-  if (!btnDrag.active) return;
-  btnDrag.active = false;
-  stopHackAction();
-};
-
-attackBtn.addEventListener('pointerup', onReticleRelease);
-attackBtn.addEventListener('pointercancel', onReticleRelease);
+}
 
 /* =========================================================
    STATS MODAL
@@ -2104,7 +1975,7 @@ document.getElementById('helpBtn').addEventListener('click', () => helpModal.cla
 document.getElementById('closeHelpBtn').addEventListener('click', () => helpModal.classList.remove('show'));
 
 /* =========================================================
-   FLIGHT PHYSICS & HACK LOOP
+   FLIGHT PHYSICS
    ========================================================= */
 let velocity = new THREE.Vector3(0, 0, 0);
 let angularVelocityX = 0;
@@ -2153,23 +2024,6 @@ function applyPendulumSelfLeveling(hasControlInput, gravityVec){
   angularVelocityZ *= 0.985;
 }
 
-function updateHoldHackAction(nowMs){
-  if (!isHoldingHack || !targetPeerId || DEFAULT_MODE !== 'hack') return;
-  const peerEntry = remotePeers.get(targetPeerId);
-  if (!peerEntry || player.position.distanceToSquared(peerEntry.mesh.position) > 240 * 240){
-    stopHackAction();
-    return;
-  }
-  const elapsed = nowMs - hackStartTime;
-  const stealStep = Math.floor(elapsed / 850);
-  if (stealStep > lastStealStep){
-    lastStealStep = stealStep;
-    const targetName = peerEntry.label || targetPeerId;
-    recordTokenDelta(1, `Mid-flight hack ${targetName}`, false);
-    publishMqtt({ type: 'PEER_HACKED', target: targetName, targetSid: targetPeerId, attacker: myPeerId, amount: 1 });
-  }
-}
-
 function applyWireframeMode(){
   scene.traverse(obj => {
     if (!obj.isMesh || !obj.material) return;
@@ -2181,31 +2035,11 @@ function applyWireframeMode(){
     });
   });
   scene.traverse(obj => {
-    if (obj.isLineSegments && obj !== lockSquareMesh) obj.visible = false;
+    if (obj.isLineSegments) obj.visible = false;
   });
 }
 
 applyWireframeMode();
-
-function updateConeLockIndicator(){
-  const nowMs = Date.now();
-  const peerId = findPeerInCone(300, 0.86);
-  const lockedPeerPos = (peerId && remotePeers.has(peerId)) ? remotePeers.get(peerId).mesh.position : null;
-
-  aimedRingIndex = lockedPeerPos ? -1 : findRingInCone(450, 0.88, nowMs);
-  const lockedRingPos = aimedRingIndex !== -1 ? routeRings[aimedRingIndex].mesh.position : null;
-  const lockedPos = lockedPeerPos || lockedRingPos;
-
-  if (lockedPos && !isHoldingHack){
-    attackBtn.classList.add('locked');
-    lockSquareMesh.visible = true;
-    lockSquareMesh.position.copy(lockedPos);
-    lockSquareMesh.quaternion.copy(camera.getWorldQuaternion(_tmpQuat2));
-  } else {
-    attackBtn.classList.remove('locked');
-    lockSquareMesh.visible = false;
-  }
-}
 
 function animate(){
   requestAnimationFrame(animate);
@@ -2250,7 +2084,6 @@ function animate(){
   }
 
   _tmpVec1.set(0, 1, 0).applyQuaternion(player.quaternion);
-  if (isReverseThrust) _tmpVec1.negate();
 
   if (Math.abs(signedThrust) > 0){
     velocity.addScaledVector(_tmpVec1, signedThrust);
@@ -2331,7 +2164,7 @@ function animate(){
   }
 
   updateRouteRingsFade(nowMs);
-  updateHoldHackAction(nowMs);
+  updateAutoHack(nowMs);
   updatePlayerShellReflection(nowMs);
   updatePeerLabelsScreenPosition();
 
@@ -2341,7 +2174,6 @@ function animate(){
     planet.mesh.rotation.x += planet.rotSpeed * 0.2;
   }
 
-  updateConeLockIndicator();
   renderer.render(scene, camera);
 }
 
