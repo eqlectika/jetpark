@@ -735,9 +735,15 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 
 const player = new THREE.Group();
 const outDir = new THREE.Vector3(0.7071, 0.7071, 0).normalize();
-const upInward = outDir.clone().negate();
-player.position.copy(outDir).multiplyScalar(PLANET_RADIUS - 40);
-player.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), upInward);
+
+// Старт снаружи, на внешней поверхности воды
+const startRadius = PLANET_RADIUS + WATER_OUTER_OFFSET + 2.0; // +2 — зазор над водой
+player.position.copy(outDir).multiplyScalar(startRadius);
+
+
+const upOutward = outDir.clone(); // уже единичный
+player.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), upOutward);
+
 scene.add(player);
 camera.quaternion.setFromEuler(new THREE.Euler(0, 0, 0, 'YXZ'));
 player.add(camera);
