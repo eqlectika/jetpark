@@ -66,6 +66,63 @@ canvas{
 #peerIdInput:focus{border-bottom-color:#38bdf8;color:#fff}
 #peerIdInput.saved{color:#a3e635 !important;border-bottom-color:#a3e635 !important}
 
+/* ============ CROSSHAIR (BUILD) ============ */
+#reticleWrap{
+  position:fixed;right:24px;bottom:84px;z-index:45;
+  touch-action:none;
+}
+#reticleModeTag{
+  position:absolute;
+  left:50%;
+  bottom:calc(100% + 2px);
+  transform:translateX(-50%);
+  padding:1px 6px;
+  border-radius:4px;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:.5px;
+  line-height:1.25;
+  text-transform:uppercase;
+  color:#7dd3fc;
+  background:rgba(10,14,26,.78);
+  border:1px solid rgba(56,189,248,.55);
+  white-space:nowrap;
+  pointer-events:none;
+  user-select:none;
+}
+#attackBtn{
+  width:56px;height:56px;
+  background:transparent;border:none;
+  color:rgba(255,255,255,.88);
+  display:flex;align-items:center;justify-content:center;
+  cursor:grab;touch-action:none;
+}
+#attackBtn.active{
+  color:#7dd3fc;
+  filter:drop-shadow(0 0 6px rgba(56,189,248,.75));
+}
+
+#buildMenu{
+  position:fixed;
+  z-index:70;
+  display:none;
+  flex-direction:column;
+  gap:4px;
+  background:rgba(10,13,25,.92);
+  border:1px solid rgba(148,163,184,.35);
+  border-radius:8px;
+  padding:6px;
+  min-width:120px;
+}
+#buildMenu.show{display:flex}
+.build-menu-item{
+  background:none;border:none;color:#e2e8f0;
+  font-size:12px;font-weight:600;text-align:left;
+  padding:6px 10px;border-radius:6px;cursor:pointer;
+}
+.build-menu-item:hover{background:rgba(56,189,248,.18);color:#7dd3fc}
+.build-menu-item.current{background:rgba(56,189,248,.28);color:#fff}
+
 .bottom-bar{
   position:fixed;left:10px;right:10px;bottom:max(8px,env(safe-area-inset-bottom));z-index:40;
   display:flex;align-items:center;justify-content:space-between;gap:8px;pointer-events:none;
@@ -276,6 +333,25 @@ canvas#statsChart:active{cursor:grabbing}
 <div id="throttleArea"></div>
 <div id="controlArea"></div>
 
+<div id="reticleWrap">
+  <div id="reticleModeTag" aria-hidden="true">SKY</div>
+  <div id="attackBtn" title="Drag to move. Long-press to build. Tap to switch mode.">
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+      <line x1="18" y1="3" x2="18" y2="13" stroke="currentColor" stroke-width="2"/>
+      <line x1="18" y1="23" x2="18" y2="33" stroke="currentColor" stroke-width="2"/>
+      <line x1="3" y1="18" x2="13" y2="18" stroke="currentColor" stroke-width="2"/>
+      <line x1="23" y1="18" x2="33" y2="18" stroke="currentColor" stroke-width="2"/>
+      <circle cx="18" cy="18" r="2.2" fill="currentColor"/>
+    </svg>
+  </div>
+</div>
+
+<div id="buildMenu">
+  <button class="build-menu-item current" data-mode="sky">Sky</button>
+  <button class="build-menu-item" data-mode="flat">Flat</button>
+  <button class="build-menu-item" data-mode="cube">Cube</button>
+</div>
+
 <div id="peerLabelsLayer"></div>
 
 <div id="chatFeed"></div>
@@ -340,8 +416,8 @@ canvas#statsChart:active{cursor:grabbing}
     <p><strong>Touch Controls:</strong> Drag up or down on the left half of the screen for throttle; drag on the right half to tilt.</p>
     <p><strong>Desktop Controls:</strong> Use Arrow keys (<code>←</code> <code>↑</code> <code>↓</code> <code>→</code>) or hold left mouse button and drag to tilt; hold <code>Space</code> for forward thrust (double-tap <code>Space</code> for boost) or <code>B</code> for reverse thrust.</p>
     <p><strong>Auto-Hack:</strong> Rings and nearby players inside your aim cone are collected automatically when in range.</p>
+    <p><strong>Build Banks:</strong> Drag the crosshair to reposition. Long-press it to build a bank at screen center (1 token per tick, 1 token fee to author). Tap it to switch mode: Sky / Flat / Cube.</p>
     <p><strong>Free Flight &amp; Gravity:</strong> Fly in any direction indefinitely. Gravity is zero at the planet center and zero at the matching outer height.</p>
-    <p><strong>Rings &amp; Hacking:</strong> Fly through the rings to collect tokens and hack nearby players to extract tokens.</p>
     <div class="help-footer-logo">
       <a href="./match.html" target="_blank" rel="noopener noreferrer" title="Telegram">
         <img src="fleurdelis.png" alt="Fleur-de-lis">
@@ -362,7 +438,6 @@ canvas#statsChart:active{cursor:grabbing}
 <script type="module">
 import * as THREE from 'three';
 
-/* Block system magnifying lens / context menu / text selection outside inputs */
 document.addEventListener('contextmenu', (e) => e.preventDefault(), { passive: false });
 document.addEventListener('selectstart', (e) => {
   if (!e.target || !['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)){
@@ -408,6 +483,10 @@ const AUTO_PEER_RANGE = 300;
 const AUTO_PEER_COS = 0.86;
 const AUTO_RING_RANGE = 450;
 const AUTO_RING_COS = 0.88;
+
+const BANK_TICK_MS = 850;
+const BANK_LONG_PRESS_MS = 450;
+const BANK_AUTHOR_FEE = 1;
 
 const _tmpVec1 = new THREE.Vector3();
 const _tmpVec2 = new THREE.Vector3();
@@ -471,6 +550,9 @@ let selectedExpenseIds = new Set();
 let selectedTimeframe = store.get('chart_timeframe', 'day');
 if (!['day', 'week', 'month', 'all'].includes(selectedTimeframe)) selectedTimeframe = 'day';
 
+let banks = Array.isArray(store.get('banks', null)) ? store.get('banks', []) : [];
+let bankArchCounters = store.get('bank_arch_counters', {}) || {};
+
 function normalizeExpenseHistory(list){
   if (!Array.isArray(list)) return [];
   return list
@@ -487,6 +569,12 @@ function saveEconomy(){
   store.set('tokens', tokens);
   store.set('token_series', tokenSeries.slice(-300));
   store.set('expense_history', expenseHistory);
+  saveBanks();
+}
+
+function saveBanks(){
+  store.set('banks', banks);
+  store.set('bank_arch_counters', bankArchCounters);
 }
 
 function recordTokenDelta(delta, reason, isExpense = false){
@@ -518,6 +606,7 @@ function recordTokenDelta(delta, reason, isExpense = false){
   if (typeof statsModal !== 'undefined' && statsModal && statsModal.classList.contains('show')){
     drawChart();
     renderExpenseHistory();
+    if (typeof renderBanksTable === 'function') renderBanksTable();
   }
 }
 
@@ -546,6 +635,10 @@ const chatFeed = document.getElementById('chatFeed');
 const chatInput = document.getElementById('chatInput');
 const peerLabelsLayer = document.getElementById('peerLabelsLayer');
 const startButtonEl = document.getElementById('startButton');
+const reticleWrapEl = document.getElementById('reticleWrap');
+const attackBtn = document.getElementById('attackBtn');
+const reticleModeTag = document.getElementById('reticleModeTag');
+const buildMenu = document.getElementById('buildMenu');
 
 function syncFullscreenButtonVisibility(){
   const isStandalonePwa =
@@ -1671,8 +1764,6 @@ function findPeerInCone(maxRange = 300, minCosAngle = 0.65){
   return bestId;
 }
 
-let aimedRingIndex = -1;
-
 function findRingInCone(maxRange = 450, minCosAngle = 0.88, nowMs = Date.now()){
   camera.updateMatrixWorld();
   const origin = camera.getWorldPosition(_tmpVec4);
@@ -1747,6 +1838,410 @@ function updateAutoHack(nowMs){
     triggerRingCaptureByIndex(ringIdx, nowMs);
   }
 }
+
+/* =========================================================
+   BANKS
+   ========================================================= */
+const bankMeshes = new Map();
+const banksGroup = new THREE.Group();
+scene.add(banksGroup);
+
+let buildMode = store.get('build_mode', 'sky');
+if (!['sky', 'flat', 'cube'].includes(buildMode)) buildMode = 'sky';
+
+function updateReticleModeTag(){
+  reticleModeTag.textContent = buildMode.toUpperCase();
+  buildMenu.querySelectorAll('.build-menu-item').forEach(btn => {
+    btn.classList.toggle('current', btn.dataset.mode === buildMode);
+  });
+}
+updateReticleModeTag();
+
+function nearestArchForDir(dir){
+  let best = centerObjects[0];
+  let bestDot = -Infinity;
+  for (const co of centerObjects){
+    const d = dir.dot(co.dir);
+    if (d > bestDot){
+      bestDot = d;
+      best = co;
+    }
+  }
+  return best;
+}
+
+function makeOwnerLabelSprite(text, colorHex){
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.font = 'bold 30px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#000000';
+  ctx.fillText(text, 128, 34);
+  ctx.fillStyle = '#' + colorHex.toString(16).padStart(6, '0');
+  ctx.fillText(text, 128, 32);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(12, 3, 1);
+  return sprite;
+}
+
+function buildBankMesh(bank){
+  const group = new THREE.Group();
+
+  // Wireframe body
+  const geo = new THREE.BoxGeometry(1, 1, 1);
+  const bodyMat = new THREE.MeshBasicMaterial({
+    color: bank.color,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.85
+  });
+  const body = new THREE.Mesh(geo, bodyMat);
+  group.add(body);
+
+  // Edge contours (bright, colored)
+  const edgeMat = new THREE.LineBasicMaterial({ color: bank.color });
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
+  group.add(edges);
+
+  // Apply shape based on mode
+  applyBankShape(group, bank);
+
+  // Ornament (miniature architecture)
+  const orn = new THREE.Group();
+  addArchAccentToParent(orn, bank.arch, 0, 0.12, bank.color, false);
+  group.add(orn);
+  group.userData.ornament = orn;
+
+  // Owner label sprite
+  const sprite = makeOwnerLabelSprite(bank.owner, bank.color);
+  group.add(sprite);
+  group.userData.labelSprite = sprite;
+
+  // Position & orientation on sphere
+  const dir = new THREE.Vector3(bank.dir[0], bank.dir[1], bank.dir[2]).normalize();
+  const normal = dir.clone().multiplyScalar(bank.side);
+  group.position.copy(dir).multiplyScalar(bank.surfaceR);
+  group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+  group.userData.dir = dir;
+  group.userData.side = bank.side;
+
+  banksGroup.add(group);
+  return group;
+}
+
+function applyBankShape(group, bank){
+  const body = group.children[0];
+  const edges = group.children[1];
+  const t = Math.max(1, bank.tokens);
+  const color = bank.color;
+
+  if (bank.mode === 'sky'){
+    const h = t;
+    const w = 1;
+    body.scale.set(w, h, w);
+    body.position.set(0, h * 0.5, 0);
+    edges.scale.copy(body.scale);
+    edges.position.copy(body.position);
+  } else if (bank.mode === 'flat'){
+    const r = Math.max(0.5, Math.sqrt(t / Math.PI));
+    const h = 1;
+    body.geometry.dispose();
+    body.geometry = new THREE.CylinderGeometry(r, r, h, 24, 1, false);
+    edges.geometry.dispose();
+    edges.geometry = new THREE.EdgesGeometry(body.geometry);
+    body.position.set(0, h * 0.5, 0);
+    edges.position.copy(body.position);
+  } else {
+    const s = Math.cbrt(t);
+    body.scale.set(s, s, s);
+    body.position.set(0, s * 0.5, 0);
+    edges.scale.copy(body.scale);
+    edges.position.copy(body.position);
+  }
+  body.material.color.setHex(color);
+  edges.material.color.setHex(color);
+}
+
+function refreshBankMesh(bank){
+  let group = bankMeshes.get(bank.id);
+  if (group){
+    // Remove old ornament and label; rebuild
+    if (group.userData.ornament){
+      group.remove(group.userData.ornament);
+      group.userData.ornament = null;
+    }
+    if (group.userData.labelSprite){
+      group.remove(group.userData.labelSprite);
+      group.userData.labelSprite = null;
+    }
+    applyBankShape(group, bank);
+
+    const orn = new THREE.Group();
+    addArchAccentToParent(orn, bank.arch, 0, 0.12, bank.color, false);
+    // Push ornament to top of body
+    const body = group.children[0];
+    const topY = body.position.y + (body.geometry.type === 'CylinderGeometry' ? 0.5 : (body.scale.y * 0.5));
+    orn.position.set(0, topY, 0);
+    group.add(orn);
+    group.userData.ornament = orn;
+
+    const sprite = makeOwnerLabelSprite(bank.owner, bank.color);
+    sprite.position.set(0, topY + 4, 0);
+    group.add(sprite);
+    group.userData.labelSprite = sprite;
+  } else {
+    group = buildBankMesh(bank);
+    bankMeshes.set(bank.id, group);
+  }
+}
+
+function createBankAtCenter(){
+  if (tokens < 1) return null;
+
+  const origin = camera.getWorldPosition(new THREE.Vector3());
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.getWorldQuaternion(new THREE.Quaternion())).normalize();
+
+  // Ray-sphere: find intersection with planet surface
+  const playerR = player.position.length();
+  const fromInside = playerR < PLANET_RADIUS;
+
+  // Approx: walk along ray until radius crosses terrain
+  let hitR = PLANET_RADIUS;
+  let hitDir = dir.clone();
+  let prevR = origin.length();
+  let prevInside = prevR < PLANET_RADIUS;
+
+  const maxSteps = 200;
+  const step = 20;
+  for (let i = 1; i <= maxSteps; i++){
+    const p = origin.clone().addScaledVector(dir, step * i);
+    const r = p.length();
+    const inside = r < PLANET_RADIUS;
+    if (inside !== prevInside){
+      // binary refine
+      let a = origin.clone().addScaledVector(dir, step * (i - 1));
+      let b = p;
+      for (let k = 0; k < 20; k++){
+        const m = a.clone().add(b).multiplyScalar(0.5);
+        if ((m.length() < PLANET_RADIUS) === prevInside) a = m;
+        else b = m;
+      }
+      const hit = a.clone().add(b).multiplyScalar(0.5);
+      hitR = hit.length();
+      hitDir = hit.clone().normalize();
+      break;
+    }
+    prevR = r;
+    prevInside = inside;
+  }
+
+  const info = sampleTerrainAtDir(hitDir);
+  const surfaceR = fromInside
+    ? Math.min(info.innerSolidR, hitR)
+    : Math.max(info.outerSolidR, hitR);
+  const side = fromInside ? -1 : 1;
+  const surfDir = hitDir.clone();
+
+  // Nearest architecture
+  const archObj = nearestArchForDir(surfDir);
+  const archName = archObj.spec.arch;
+
+  // Per-architecture counter
+  const currentCount = Number(bankArchCounters[archName] || 0) + 1;
+  bankArchCounters[archName] = currentCount;
+  const displayName = `${archName.charAt(0).toUpperCase() + archName.slice(1)}-${currentCount}`;
+
+  // Color: pick from palette by index
+  const color = linePalette[(currentCount - 1) % linePalette.length];
+
+  const bank = {
+    id: 'bank_' + Date.now() + '_' + Math.random().toString(16).slice(2, 6),
+    name: displayName,
+    arch: archName,
+    owner: myPeerId,
+    mode: buildMode,
+    tokens: 0,
+    dir: [surfDir.x, surfDir.y, surfDir.z],
+    side,
+    surfaceR,
+    color,
+    ts: Date.now()
+  };
+
+  banks.unshift(bank);
+  saveBanks();
+  refreshBankMesh(bank);
+  return bank;
+}
+
+function growBank(bank){
+  if (tokens < 1) return false;
+  recordTokenDelta(-1, `Build ${bank.name}`, true);
+  bank.tokens += 1;
+  routeAuthorFee(BANK_AUTHOR_FEE, 'bank_build');
+  saveBanks();
+  refreshBankMesh(bank);
+  return true;
+}
+
+/* ---- Crosshair interactions ---- */
+let buildingBank = null;
+let bankTickTimer = null;
+let bankLongPressTimer = null;
+let bankPressMoved = false;
+let bankPressStart = { x: 0, y: 0 };
+let bankBtnDrag = { active: false, ox: 0, oy: 0 };
+
+function startBankBuilding(){
+  if (buildingBank) return;
+  buildingBank = createBankAtCenter();
+  if (!buildingBank) return;
+  attackBtn.classList.add('active');
+  if (buildingBank.tokens < 1) growBank(buildingBank);
+  bankTickTimer = setInterval(() => {
+    if (!buildingBank) return;
+    if (tokens < 1){
+      stopBankBuilding();
+      return;
+    }
+    growBank(buildingBank);
+  }, BANK_TICK_MS);
+}
+
+function stopBankBuilding(){
+  if (bankTickTimer){
+    clearInterval(bankTickTimer);
+    bankTickTimer = null;
+  }
+  buildingBank = null;
+  attackBtn.classList.remove('active');
+}
+
+function openBuildMenu(){
+  const r = reticleWrapEl.getBoundingClientRect();
+  buildMenu.style.left = Math.max(8, Math.min(window.innerWidth - 140, r.right - 130)) + 'px';
+  buildMenu.style.top = Math.max(8, r.top - 130) + 'px';
+  buildMenu.classList.add('show');
+  updateReticleModeTag();
+}
+function closeBuildMenu(){
+  buildMenu.classList.remove('show');
+}
+
+buildMenu.querySelectorAll('.build-menu-item').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    buildMode = btn.dataset.mode;
+    store.set('build_mode', buildMode);
+    updateReticleModeTag();
+    closeBuildMenu();
+  });
+});
+
+attackBtn.addEventListener('pointerdown', (e) => {
+  e.stopPropagation();
+  e.preventDefault();
+  attackBtn.setPointerCapture(e.pointerId);
+  const r = attackBtn.getBoundingClientRect();
+  bankBtnDrag = {
+    active: true,
+    ox: e.clientX - r.left,
+    oy: e.clientY - r.top
+  };
+  bankPressMoved = false;
+  bankPressStart = { x: e.clientX, y: e.clientY };
+
+  if (bankLongPressTimer) clearTimeout(bankLongPressTimer);
+  bankLongPressTimer = setTimeout(() => {
+    bankLongPressTimer = null;
+    if (!bankPressMoved){
+      startBankBuilding();
+    }
+  }, BANK_LONG_PRESS_MS);
+});
+
+attackBtn.addEventListener('pointermove', (e) => {
+  if (!bankBtnDrag.active) return;
+  if (Math.hypot(e.clientX - bankPressStart.x, e.clientY - bankPressStart.y) > 8){
+    bankPressMoved = true;
+    if (bankLongPressTimer){ clearTimeout(bankLongPressTimer); bankLongPressTimer = null; }
+  }
+  if (bankPressMoved){
+    const nx = Math.max(8, Math.min(window.innerWidth - 64, e.clientX - bankBtnDrag.ox));
+    const ny = Math.max(66, Math.min(window.innerHeight - 104, e.clientY - bankBtnDrag.oy));
+    reticleWrapEl.style.left = nx + 'px';
+    reticleWrapEl.style.top = ny + 'px';
+    reticleWrapEl.style.right = 'auto';
+    reticleWrapEl.style.bottom = 'auto';
+  }
+});
+
+function onAttackBtnRelease(e){
+  if (e) e.stopPropagation();
+  if (!bankBtnDrag.active) return;
+  bankBtnDrag.active = false;
+  if (bankLongPressTimer){
+    clearTimeout(bankLongPressTimer);
+    bankLongPressTimer = null;
+  }
+  if (buildingBank){
+    stopBankBuilding();
+    return;
+  }
+  if (!bankPressMoved){
+    // Tap: open/close build menu
+    if (buildMenu.classList.contains('show')) closeBuildMenu();
+    else openBuildMenu();
+  } else {
+    closeBuildMenu();
+  }
+}
+attackBtn.addEventListener('pointerup', onAttackBtnRelease);
+attackBtn.addEventListener('pointercancel', onAttackBtnRelease);
+
+document.addEventListener('pointerdown', (e) => {
+  if (!buildMenu.contains(e.target) && e.target !== attackBtn){
+    closeBuildMenu();
+  }
+}, true);
+
+/* Animate banks: rotate owner label horizontally + spin gyro inside ornament */
+function updateBanksAnimation(nowSec){
+  for (const group of bankMeshes.values()){
+    const sprite = group.userData.labelSprite;
+    if (sprite){
+      // Billboard-style rotation around vertical axis
+      sprite.material.rotation = 0;
+      const camDir = camera.position.clone().sub(group.position);
+      const angle = Math.atan2(camDir.x, camDir.z);
+      sprite.position.x = Math.sin(nowSec * 0.8) * 0.001;
+      sprite.material.rotation = angle;
+    }
+    const orn = group.userData.ornament;
+    if (orn){
+      orn.rotation.y += 0.01;
+    }
+  }
+}
+
+/* Rebuild all banks on startup */
+function rebuildAllBanks(){
+  for (const bank of banks){
+    refreshBankMesh(bank);
+  }
+}
+rebuildAllBanks();
 
 /* =========================================================
    STATS MODAL
@@ -2165,6 +2660,7 @@ function animate(){
 
   updateRouteRingsFade(nowMs);
   updateAutoHack(nowMs);
+  updateBanksAnimation(elapsedTimeSec);
   updatePlayerShellReflection(nowMs);
   updatePeerLabelsScreenPosition();
 
