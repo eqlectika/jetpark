@@ -398,6 +398,14 @@ canvas#statsChart:active{cursor:grabbing}
       </div>
     </div>
     <div class="hist-list" id="expenseHistoryList"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px">
+  <strong style="font-size:13px">Banks</strong>
+  <div style="display:flex;gap:6px">
+    <button class="act-btn secondary" id="selectAllBanksBtn">Select All</button>
+    <button class="act-btn danger" id="withdrawSelectedBanksBtn" disabled>Withdrawal Selected</button>
+  </div>
+</div>
+<div class="hist-list" id="banksList"></div>
   </div>
 </div>
 
@@ -2433,7 +2441,116 @@ document.getElementById('sendTokensBtn').addEventListener('click', () => {
   drawChart();
   renderExpenseHistory();
 });
+const banksListEl = document.getElementById('banksList');
+const selectAllBanksBtn = document.getElementById('selectAllBanksBtn');
+const withdrawSelectedBanksBtn = document.getElementById('withdrawSelectedBanksBtn');
+let selectedBankIds = new Set();
 
+function syncBanksButtonsState(){
+  // Только свои банки можно выбирать
+  const ownBanks = banks.filter(b => b.owner === myPeerId);
+  withdrawSelectedBanksBtn.disabled = selectedBankIds.size === 0;
+  selectAllBanksBtn.textContent =
+    (ownBanks.length > 0 && selectedBankIds.size === ownBanks.length)
+      ? 'Unselect All'
+      : 'Select All';
+}
+
+function renderBanksTable(){
+  banksListEl.innerHTML = '';
+  if (!banks.length){
+    banksListEl.innerHTML = '<div style="padding:10px;color:#64748b;font-size:12px">No banks yet</div>';
+    selectedBankIds.clear();
+    syncBanksButtonsState();
+    return;
+  }
+
+  // Уже в порядке: вверху последние (banks.unshift при создании)
+  banks.forEach((bank) => {
+    const isMine = bank.owner === myPeerId;
+    const row = document.createElement('div');
+    row.className = 'hist-item' + (selectedBankIds.has(bank.id) ? ' sel' : '');
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = selectedBankIds.has(bank.id);
+    cb.disabled = !isMine;
+    if (!isMine) cb.title = 'Only your banks can be withdrawn';
+    cb.addEventListener('change', () => {
+      if (cb.checked) selectedBankIds.add(bank.id);
+      else selectedBankIds.delete(bank.id);
+      row.classList.toggle('sel', cb.checked);
+      syncBanksButtonsState();
+    });
+
+    const nameSpan = document.createElement('span');
+    nameSpan.style.color = '#' + bank.color.toString(16).padStart(6, '0');
+    nameSpan.style.fontWeight = '600';
+    nameSpan.textContent = bank.name;
+
+    const ownerSpan = document.createElement('span');
+    ownerSpan.style.color = isMine ? '#4ade80' : '#94a3b8';
+    ownerSpan.textContent = bank.owner;
+
+    const modeSpan = document.createElement('span');
+    modeSpan.style.color = '#94a3b8';
+    modeSpan.textContent = bank.mode;
+
+    const tokensSpan = document.createElement('span');
+    tokensSpan.className = 'hist-amount in';
+    tokensSpan.textContent = bank.tokens + '⭕️';
+
+    row.appendChild(cb);
+    row.appendChild(nameSpan);
+    row.appendChild(ownerSpan);
+    row.appendChild(modeSpan);
+    row.appendChild(tokensSpan);
+    banksListEl.appendChild(row);
+  });
+  syncBanksButtonsState();
+}
+
+selectAllBanksBtn.addEventListener('click', () => {
+  const ownBanks = banks.filter(b => b.owner === myPeerId);
+  if (!ownBanks.length) return;
+  if (selectedBankIds.size === ownBanks.length){
+    selectedBankIds.clear();
+  } else {
+    selectedBankIds = new Set(ownBanks.map(b => b.id));
+  }
+  renderBanksTable();
+});
+
+withdrawSelectedBanksBtn.addEventListener('click', () => {
+  if (!selectedBankIds.size) return;
+  let totalWithdrawn = 0;
+  const toRemove = [];
+  for (const bank of banks){
+    if (selectedBankIds.has(bank.id) && bank.owner === myPeerId){
+      totalWithdrawn += bank.tokens;
+      toRemove.push(bank.id);
+    }
+  }
+  if (totalWithdrawn <= 0){
+    selectedBankIds.clear();
+    renderBanksTable();
+    return;
+  }
+  // Вернуть токены на баланс
+  recordTokenDelta(totalWithdrawn, 'Withdrawal', false);
+  // Удалить банки и их меши
+  for (const id of toRemove){
+    const mesh = bankMeshes.get(id);
+    if (mesh){
+      banksGroup.remove(mesh);
+      bankMeshes.delete(id);
+    }
+  }
+  banks = banks.filter(b => !toRemove.includes(b.id));
+  selectedBankIds.clear();
+  saveBanks();
+  renderBanksTable();
+});
 function refreshRecipientSelect(){
   const prevVal = recipientSelect.value;
   recipientSelect.innerHTML = '';
@@ -2463,10 +2580,12 @@ function refreshRecipientSelect(){
 function openStats(){
   refreshRecipientSelect();
   selectedExpenseIds.clear();
+  selectedBankIds.clear();
   syncTimeframeUI();
   statsModal.classList.add('show');
   drawChart();
   renderExpenseHistory();
+  renderBanksTable();
 }
 document.getElementById('tokenCounterDock').addEventListener('click', openStats);
 document.getElementById('closeStatsBtn').addEventListener('click', () => statsModal.classList.remove('show'));
