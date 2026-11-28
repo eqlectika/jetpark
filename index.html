@@ -2503,20 +2503,23 @@ function drawChart(){
     const yC = valToY(cl);
 
     const isPositive = cl >= o;
-    const bodyTop = Math.min(yO, yC);
-    const bodyH = Math.max(2, Math.abs(yC - yO));
+    const rawBodyH = Math.abs(yC - yO);
+    const isDoji = rawBodyH < 1.5;
+    const bodyTop = isDoji ? (yO + yC) * 0.5 - 0.75 : Math.min(yO, yC);
+    const bodyH = isDoji ? 1.5 : rawBodyH;
+    const bodyBottom = bodyTop + bodyH;
     const halfW = bodyW * 0.5;
-
-    // Тень свечи (High - Low)
-    ctx.strokeStyle = candleColor;
-    ctx.lineWidth = 1.25;
-    ctx.beginPath();
-    ctx.moveTo(cx, yH);
-    ctx.lineTo(cx, yL);
-    ctx.stroke();
+    const wickHalfW = Math.max(2, Math.min(4, bodyW * 0.22));
 
     // Тело свечи: залитое в плюс, полое в минус
-    if (isPositive){
+    if (isDoji){
+      ctx.strokeStyle = candleColor;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(cx - halfW, bodyTop + 0.75);
+      ctx.lineTo(cx + halfW, bodyTop + 0.75);
+      ctx.stroke();
+    } else if (isPositive){
       ctx.fillStyle = candleColor;
       ctx.fillRect(cx - halfW, bodyTop, bodyW, bodyH);
     } else {
@@ -2526,6 +2529,24 @@ function drawChart(){
       ctx.lineWidth = 1.5;
       ctx.strokeRect(cx - halfW, bodyTop, bodyW, bodyH);
     }
+
+    // Верхний фитиль (High) и нижний хвост (Low)
+    ctx.strokeStyle = candleColor;
+    ctx.lineWidth = 1.35;
+    ctx.beginPath();
+    if (yH < bodyTop){
+      ctx.moveTo(cx, yH);
+      ctx.lineTo(cx, bodyTop);
+      ctx.moveTo(cx - wickHalfW, yH);
+      ctx.lineTo(cx + wickHalfW, yH);
+    }
+    if (yL > bodyBottom){
+      ctx.moveTo(cx, bodyBottom);
+      ctx.lineTo(cx, yL);
+      ctx.moveTo(cx - wickHalfW, yL);
+      ctx.lineTo(cx + wickHalfW, yL);
+    }
+    ctx.stroke();
   });
 
   ctx.fillStyle = '#94a3b8';
